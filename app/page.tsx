@@ -19,11 +19,17 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-8 font-mono">
-      <header>
+      <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold">forge</h1>
         <p className="text-sm text-gray-500">
           phase 1: streaming round-trip sanity check
         </p>
+        <a
+          href="/debug"
+          className="text-xs text-cyan-400 underline underline-offset-2"
+        >
+          → multi-agent debug surface
+        </a>
       </header>
 
       <section className="flex flex-1 flex-col gap-4">
