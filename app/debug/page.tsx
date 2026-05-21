@@ -20,6 +20,17 @@ type SpeculatorMetrics = {
   inFlight: number;
 };
 
+type LaneCalibration = {
+  lane: LaneName;
+  sampleCount: number;
+  brierScore: number | null;
+  meanPredicted: number;
+  meanOutcome: number;
+  weight: number;
+};
+
+type CalibrationMap = Record<LaneName, LaneCalibration>;
+
 type Frame =
   | { type: "session:open"; sessionId: string }
   | { type: "session:resume"; sessionId: string }
@@ -40,6 +51,7 @@ type Frame =
       hypotheses: Hypothesis[];
       totalDurationMs: number;
       speculatorMetrics: SpeculatorMetrics | null;
+      calibration: CalibrationMap;
     }
   | { type: "fatal"; reason: string };
 
@@ -71,6 +83,7 @@ export default function DebugPage() {
   const [speculatorMetrics, setSpeculatorMetrics] = useState<SpeculatorMetrics | null>(
     null,
   );
+  const [calibration, setCalibration] = useState<CalibrationMap | null>(null);
   const [running, setRunning] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -148,6 +161,7 @@ export default function DebugPage() {
       setHypotheses(frame.hypotheses);
       setTotalDurationMs(frame.totalDurationMs);
       setSpeculatorMetrics(frame.speculatorMetrics);
+      setCalibration(frame.calibration);
     } else if (frame.type === "fatal") {
       setFatal(frame.reason);
     }
@@ -184,6 +198,7 @@ export default function DebugPage() {
     setHypotheses([]);
     setTotalDurationMs(null);
     setSpeculatorMetrics(null);
+    setCalibration(null);
     setFatal(null);
     setRunning(true);
     clearUrl();
@@ -207,6 +222,7 @@ export default function DebugPage() {
     setHypotheses([]);
     setTotalDurationMs(null);
     setSpeculatorMetrics(null);
+    setCalibration(null);
     setFatal(null);
     setRunning(true);
     try {
@@ -323,6 +339,39 @@ export default function DebugPage() {
               </footer>
             </article>
           ))}
+        </section>
+      )}
+
+      {calibration && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-lg font-bold">calibration</h2>
+          <p className="text-xs text-gray-500">
+            Brier score per lane (lower is better; 0 = perfect, 0.25 = uncalibrated).
+            Weight is applied to confidence on next run. Stub correctness oracle until
+            Phase 5 ships the real eval harness.
+          </p>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {LANE_ORDER.map((laneName) => {
+              const c = calibration[laneName];
+              return (
+                <div
+                  key={laneName}
+                  className="rounded border border-gray-200 p-3 text-xs dark:border-gray-800"
+                >
+                  <div className="font-bold">{laneName}</div>
+                  <div className="text-gray-500">
+                    samples: {c.sampleCount} | brier:{" "}
+                    {c.brierScore === null ? "—" : c.brierScore.toFixed(3)} | weight:{" "}
+                    {c.weight.toFixed(2)}
+                  </div>
+                  <div className="text-gray-500">
+                    mean predicted {c.meanPredicted.toFixed(2)} vs mean outcome{" "}
+                    {c.meanOutcome.toFixed(2)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 

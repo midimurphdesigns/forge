@@ -3,6 +3,7 @@ import { runBlameCorrelator } from "@/lib/agents/blame-correlator";
 import { runFrequencyAnalyzer } from "@/lib/agents/frequency-analyzer";
 import { runReproDrafter } from "@/lib/agents/repro-drafter";
 import { runSourceReader } from "@/lib/agents/source-reader";
+import { getCalibration, logOutcome, type LaneCalibration } from "@/lib/calibration";
 import {
   isLaneAborted,
   sessionStore,
@@ -37,6 +38,7 @@ export type ProgressEvent =
       hypotheses: Hypothesis[];
       totalDurationMs: number;
       speculatorMetrics: SpeculatorMetricsSnapshot | null;
+      calibration: Record<LaneName, LaneCalibration>;
     };
 
 export async function runCoordinator(
@@ -121,7 +123,8 @@ export async function runCoordinator(
     ),
   );
 
-  const hypotheses = mergeHypotheses(outcomes);
+  const calibration = await getCalibration();
+  const hypotheses = mergeHypotheses(outcomes, calibration);
   const totalDurationMs = Date.now() - startedAt;
 
   const finalState = await sessionStore.patch(sessionId, (s) => ({
@@ -133,17 +136,55 @@ export async function runCoordinator(
     totalDurationMs,
   }));
 
+  await logSessionOutcomes(sessionId, outcomes);
+
   onProgress?.({
     type: "merge",
     hypotheses,
     totalDurationMs,
     speculatorMetrics: finalState.speculatorMetrics,
+    calibration,
   });
 
   return { outcomes, hypotheses, totalDurationMs };
 }
 
-function mergeHypotheses(outcomes: LaneOutcome[]): Hypothesis[] {
+async function logSessionOutcomes(
+  sessionId: string,
+  outcomes: LaneOutcome[],
+): Promise<void> {
+  const timestamp = new Date().toISOString();
+  for (const o of outcomes) {
+    if (o.status !== "fulfilled") continue;
+    const predicted = o.value.confidence;
+    const outcome = stubCorrectnessOracle(o.value);
+    await logOutcome({
+      lane: o.lane,
+      predicted,
+      outcome,
+      timestamp,
+      sessionId,
+    });
+  }
+}
+
+function stubCorrectnessOracle(result: LaneResult): 0 | 1 {
+  if (result.lane === "source-reader") {
+    return result.file === "src/auth/session.ts" ? 1 : 0;
+  }
+  if (result.lane === "blame-correlator") {
+    return result.topSuspect === "a3f1c92" ? 1 : 0;
+  }
+  if (result.lane === "frequency-analyzer") {
+    return result.severityClass === "p1" || result.severityClass === "p0" ? 1 : 0;
+  }
+  return result.confidence >= 0.5 ? 1 : 0;
+}
+
+function mergeHypotheses(
+  outcomes: LaneOutcome[],
+  calibration: Record<LaneName, LaneCalibration>,
+): Hypothesis[] {
   const fulfilled = outcomes.flatMap((o) => (o.status === "fulfilled" ? [o.value] : []));
 
   const sourceReader = fulfilled.find(
@@ -163,6 +204,10 @@ function mergeHypotheses(outcomes: LaneOutcome[]): Hypothesis[] {
 
   const hypotheses: Hypothesis[] = [];
 
+  const w = (lane: LaneName) => calibration[lane]?.weight ?? 1.0;
+  const cw = (lane: LaneName, c: number) =>
+    Math.max(0, Math.min(1, c * w(lane)));
+
   if (sourceReader && blame?.topSuspect) {
     const supportingLanes: LaneName[] = ["source-reader", "blame-correlator"];
     if (frequency) supportingLanes.push("frequency-analyzer");
@@ -174,9 +219,9 @@ function mergeHypotheses(outcomes: LaneOutcome[]): Hypothesis[] {
       }`,
       supportingLanes,
       confidence: averageConfidence([
-        sourceReader.confidence,
-        blame.confidence,
-        frequency?.confidence,
+        cw("source-reader", sourceReader.confidence),
+        cw("blame-correlator", blame.confidence),
+        frequency ? cw("frequency-analyzer", frequency.confidence) : undefined,
       ]),
     });
   } else if (sourceReader) {
@@ -184,7 +229,7 @@ function mergeHypotheses(outcomes: LaneOutcome[]): Hypothesis[] {
       title: `Suspect code path: ${sourceReader.file}:${sourceReader.lineRange[0]}-${sourceReader.lineRange[1]}`,
       description: sourceReader.reasoning,
       supportingLanes: ["source-reader"],
-      confidence: sourceReader.confidence,
+      confidence: cw("source-reader", sourceReader.confidence),
     });
   }
 
@@ -193,7 +238,7 @@ function mergeHypotheses(outcomes: LaneOutcome[]): Hypothesis[] {
       title: "Reproduction available",
       description: `${repro.reproSteps.length} steps. Environment: ${repro.reproEnvironment}.${repro.knownGaps.length > 0 ? ` Gaps: ${repro.knownGaps.join("; ")}.` : ""}`,
       supportingLanes: ["repro-drafter"],
-      confidence: repro.confidence * 0.6,
+      confidence: cw("repro-drafter", repro.confidence) * 0.6,
     });
   }
 
@@ -202,7 +247,7 @@ function mergeHypotheses(outcomes: LaneOutcome[]): Hypothesis[] {
       title: `Severity ${frequency.severityClass.toUpperCase()} — ${frequency.affectedUsers} users affected`,
       description: `${frequency.totalOccurrences} occurrences since ${frequency.firstSeen}.${frequency.spikeDetected ? " Active spike detected." : ""}`,
       supportingLanes: ["frequency-analyzer"],
-      confidence: frequency.confidence,
+      confidence: cw("frequency-analyzer", frequency.confidence),
     });
   }
 

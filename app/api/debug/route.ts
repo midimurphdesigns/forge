@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getCalibration } from "@/lib/calibration";
 import { runCoordinator, type ProgressEvent } from "@/lib/coordinator";
 import { sessionStore } from "@/lib/store";
 import type { DebugInput, LaneName, LaneResult } from "@/lib/types";
@@ -88,6 +89,7 @@ export async function GET(req: Request): Promise<Response> {
       }
 
       if (state.status === "complete" && state.totalDurationMs !== null) {
+        const calibration = await getCalibration();
         controller.enqueue(
           new TextEncoder().encode(
             `data: ${JSON.stringify({
@@ -95,6 +97,7 @@ export async function GET(req: Request): Promise<Response> {
               hypotheses: state.hypotheses,
               totalDurationMs: state.totalDurationMs,
               speculatorMetrics: state.speculatorMetrics,
+              calibration,
             })}\n\n`,
           ),
         );
