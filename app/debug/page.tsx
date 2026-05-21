@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SAMPLE_INPUT } from "@/lib/sample-input";
 import type { Hypothesis, LaneName, LaneResult } from "@/lib/types";
 
-type LaneStatus = "queued" | "running" | "done" | "error";
+type LaneStatus = "queued" | "running" | "done" | "error" | "aborted";
 
 type LaneState = {
   status: LaneStatus;
@@ -13,10 +13,21 @@ type LaneState = {
   error: string | null;
 };
 
-type ProgressEvent =
+type Frame =
+  | { type: "session:open"; sessionId: string }
+  | { type: "session:resume"; sessionId: string }
   | { type: "lane:start"; lane: LaneName }
   | { type: "lane:done"; lane: LaneName; durationMs: number; result: LaneResult }
   | { type: "lane:error"; lane: LaneName; durationMs: number; reason: string }
+  | { type: "lane:aborted"; lane: LaneName; durationMs: number }
+  | {
+      type: "lane:replay";
+      lane: LaneName;
+      status: LaneStatus;
+      durationMs: number | null;
+      result: LaneResult | null;
+      error: string | null;
+    }
   | { type: "merge"; hypotheses: Hypothesis[]; totalDurationMs: number }
   | { type: "fatal"; reason: string };
 
@@ -47,6 +58,110 @@ export default function DebugPage() {
   const [totalDurationMs, setTotalDurationMs] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const existing = params.get("sessionId");
+    if (existing) {
+      void resume(existing);
+    }
+  }, []);
+
+  const updateUrl = (id: string) => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("sessionId", id);
+    window.history.replaceState(null, "", url.toString());
+  };
+
+  const clearUrl = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("sessionId");
+    window.history.replaceState(null, "", url.toString());
+  };
+
+  const handleFrame = (frame: Frame) => {
+    if (frame.type === "session:open" || frame.type === "session:resume") {
+      setSessionId(frame.sessionId);
+      updateUrl(frame.sessionId);
+    } else if (frame.type === "lane:start") {
+      setLanes((prev) => ({
+        ...prev,
+        [frame.lane]: { ...prev[frame.lane], status: "running" },
+      }));
+    } else if (frame.type === "lane:done") {
+      setLanes((prev) => ({
+        ...prev,
+        [frame.lane]: {
+          status: "done",
+          durationMs: frame.durationMs,
+          result: frame.result,
+          error: null,
+        },
+      }));
+    } else if (frame.type === "lane:error") {
+      setLanes((prev) => ({
+        ...prev,
+        [frame.lane]: {
+          status: "error",
+          durationMs: frame.durationMs,
+          result: null,
+          error: frame.reason,
+        },
+      }));
+    } else if (frame.type === "lane:aborted") {
+      setLanes((prev) => ({
+        ...prev,
+        [frame.lane]: {
+          status: "aborted",
+          durationMs: frame.durationMs,
+          result: null,
+          error: "aborted by user",
+        },
+      }));
+    } else if (frame.type === "lane:replay") {
+      setLanes((prev) => ({
+        ...prev,
+        [frame.lane]: {
+          status: frame.status,
+          durationMs: frame.durationMs,
+          result: frame.result,
+          error: frame.error,
+        },
+      }));
+    } else if (frame.type === "merge") {
+      setHypotheses(frame.hypotheses);
+      setTotalDurationMs(frame.totalDurationMs);
+    } else if (frame.type === "fatal") {
+      setFatal(frame.reason);
+    }
+  };
+
+  const consumeStream = async (res: Response) => {
+    if (!res.ok || !res.body) {
+      setFatal(`request failed: ${res.status} ${res.statusText}`);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+
+      for (const raw of frames) {
+        if (!raw.startsWith("data: ")) continue;
+        const json = raw.slice(6).trim();
+        if (!json) continue;
+        handleFrame(JSON.parse(json) as Frame);
+      }
+    }
+  };
 
   const run = async () => {
     setLanes(INITIAL_STATE);
@@ -54,39 +169,15 @@ export default function DebugPage() {
     setTotalDurationMs(null);
     setFatal(null);
     setRunning(true);
-
+    clearUrl();
+    setSessionId(null);
     try {
       const res = await fetch("/api/debug", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(SAMPLE_INPUT),
       });
-
-      if (!res.ok || !res.body) {
-        setFatal(`request failed: ${res.status} ${res.statusText}`);
-        setRunning(false);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const frames = buffer.split("\n\n");
-        buffer = frames.pop() ?? "";
-
-        for (const frame of frames) {
-          if (!frame.startsWith("data: ")) continue;
-          const json = frame.slice(6).trim();
-          if (!json) continue;
-          handleEvent(JSON.parse(json) as ProgressEvent);
-        }
-      }
+      await consumeStream(res);
     } catch (err) {
       setFatal(err instanceof Error ? err.message : String(err));
     } finally {
@@ -94,38 +185,29 @@ export default function DebugPage() {
     }
   };
 
-  const handleEvent = (event: ProgressEvent) => {
-    if (event.type === "lane:start") {
-      setLanes((prev) => ({
-        ...prev,
-        [event.lane]: { ...prev[event.lane], status: "running" },
-      }));
-    } else if (event.type === "lane:done") {
-      setLanes((prev) => ({
-        ...prev,
-        [event.lane]: {
-          status: "done",
-          durationMs: event.durationMs,
-          result: event.result,
-          error: null,
-        },
-      }));
-    } else if (event.type === "lane:error") {
-      setLanes((prev) => ({
-        ...prev,
-        [event.lane]: {
-          status: "error",
-          durationMs: event.durationMs,
-          result: null,
-          error: event.reason,
-        },
-      }));
-    } else if (event.type === "merge") {
-      setHypotheses(event.hypotheses);
-      setTotalDurationMs(event.totalDurationMs);
-    } else if (event.type === "fatal") {
-      setFatal(event.reason);
+  const resume = async (id: string) => {
+    setLanes(INITIAL_STATE);
+    setHypotheses([]);
+    setTotalDurationMs(null);
+    setFatal(null);
+    setRunning(true);
+    try {
+      const res = await fetch(`/api/debug?sessionId=${encodeURIComponent(id)}`);
+      await consumeStream(res);
+    } catch (err) {
+      setFatal(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRunning(false);
     }
+  };
+
+  const interrupt = async (lane: LaneName) => {
+    if (!sessionId) return;
+    await fetch("/api/debug/interrupt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, lane }),
+    });
   };
 
   return (
@@ -133,12 +215,18 @@ export default function DebugPage() {
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold">forge / debug</h1>
         <p className="text-sm text-gray-500">
-          parallel multi-agent investigation. four specialists fan out, coordinator ranks
-          hypotheses.
+          parallel multi-agent investigation. resumable + per-lane interrupt.
         </p>
+        {sessionId && (
+          <p className="text-xs text-gray-500">
+            session{" "}
+            <span className="font-bold text-cyan-400">{sessionId.slice(0, 8)}</span>{" "}
+            (refresh this page to resume)
+          </p>
+        )}
       </header>
 
-      <section>
+      <section className="flex items-center gap-3">
         <button
           type="button"
           onClick={run}
@@ -148,15 +236,14 @@ export default function DebugPage() {
           {running ? "investigating..." : "run sample investigation"}
         </button>
         {totalDurationMs !== null && (
-          <span className="ml-3 text-xs text-gray-500">
-            wall-clock {totalDurationMs}ms
-          </span>
+          <span className="text-xs text-gray-500">wall-clock {totalDurationMs}ms</span>
         )}
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {LANE_ORDER.map((laneName) => {
           const lane = lanes[laneName];
+          const canInterrupt = lane.status === "running" && sessionId !== null;
           return (
             <article
               key={laneName}
@@ -167,7 +254,18 @@ export default function DebugPage() {
                   <h2 className="text-sm font-bold">{laneName}</h2>
                   <p className="text-xs text-gray-500">{LANE_DESCRIPTIONS[laneName]}</p>
                 </div>
-                <StatusBadge status={lane.status} durationMs={lane.durationMs} />
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={lane.status} durationMs={lane.durationMs} />
+                  {canInterrupt && (
+                    <button
+                      type="button"
+                      onClick={() => interrupt(laneName)}
+                      className="text-[10px] uppercase text-red-400 underline underline-offset-2"
+                    >
+                      stop
+                    </button>
+                  )}
+                </div>
               </header>
               <LaneBody lane={lane} />
             </article>
@@ -224,7 +322,9 @@ function StatusBadge({
         ? "text-yellow-400"
         : status === "error"
           ? "text-red-400"
-          : "text-gray-400";
+          : status === "aborted"
+            ? "text-orange-400"
+            : "text-gray-400";
   return (
     <span className={`text-xs uppercase ${color}`}>
       {status}
@@ -240,8 +340,8 @@ function LaneBody({ lane }: { lane: LaneState }) {
   if (lane.status === "running") {
     return <p className="text-xs text-gray-400">working...</p>;
   }
-  if (lane.status === "error") {
-    return <p className="text-xs text-red-500">{lane.error}</p>;
+  if (lane.status === "error" || lane.status === "aborted") {
+    return <p className="text-xs text-red-500">{lane.error ?? "no detail"}</p>;
   }
   if (lane.result) {
     return <ResultBody result={lane.result} />;
@@ -304,7 +404,6 @@ function ResultBody({ result }: { result: LaneResult }) {
       </div>
     );
   }
-  // repro-drafter
   return (
     <div className="flex flex-col gap-1 text-xs">
       <div>
