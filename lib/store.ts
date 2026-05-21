@@ -1,3 +1,5 @@
+import type { CostSummary, UsageSample } from "@/lib/cost";
+import { CostAccumulator } from "@/lib/cost";
 import type { CoordinatorResult, LaneName, LaneOutcome, LaneResult } from "@/lib/types";
 
 export type SessionStatus = "running" | "complete" | "aborted";
@@ -23,6 +25,7 @@ export type SessionState = {
   totalDurationMs: number | null;
   abortedLanes: LaneName[];
   speculatorMetrics: SpeculatorMetricsSnapshot | null;
+  cost: CostSummary | null;
 };
 
 export type LaneStatus = "queued" | "running" | "done" | "error" | "aborted";
@@ -36,6 +39,25 @@ export type SessionStore = {
   ): Promise<SessionState>;
   delete(sessionId: string): Promise<void>;
 };
+
+const costAccumulators = new Map<string, CostAccumulator>();
+
+export function recordUsage(sessionId: string, sample: UsageSample): void {
+  let acc = costAccumulators.get(sessionId);
+  if (!acc) {
+    acc = new CostAccumulator();
+    costAccumulators.set(sessionId, acc);
+  }
+  acc.record(sample);
+}
+
+export function summarizeCost(sessionId: string): CostSummary | null {
+  return costAccumulators.get(sessionId)?.summarize() ?? null;
+}
+
+export function clearCost(sessionId: string): void {
+  costAccumulators.delete(sessionId);
+}
 
 const INITIAL_LANE_STATUS: Record<LaneName, LaneStatus> = {
   "source-reader": "queued",
@@ -63,6 +85,7 @@ class InMemoryStore implements SessionStore {
       totalDurationMs: null,
       abortedLanes: [],
       speculatorMetrics: null,
+      cost: null,
     };
     this.sessions.set(sessionId, state);
     return state;

@@ -1,6 +1,8 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
+import { extractUsage } from "@/lib/cost";
+import { recordUsage } from "@/lib/store";
 import {
   queryAffectedUsers,
   queryErrors,
@@ -8,6 +10,8 @@ import {
   queryRelatedErrors,
 } from "@/lib/tools/errors";
 import type { DebugInput, FrequencyAnalyzerResult } from "@/lib/types";
+
+const MODEL = "claude-sonnet-4-6";
 
 const Schema = z.object({
   totalOccurrences: z.number().int().nonnegative(),
@@ -32,11 +36,23 @@ Severity rubric:
 
 export async function runFrequencyAnalyzer(
   input: DebugInput,
+  sessionId?: string,
 ): Promise<FrequencyAnalyzerResult> {
   const investigation = await generateText({
-    model: anthropic("claude-sonnet-4-6"),
-    system: SYSTEM,
-    prompt: `Error fingerprint: ${input.errorFingerprint}\nFirst observed: ${input.errorTimestamp}\n\nQuery the error metrics, decide severity, return the structured report.`,
+    model: anthropic(MODEL),
+    messages: [
+      {
+        role: "system",
+        content: SYSTEM,
+        providerOptions: {
+          anthropic: { cacheControl: { type: "ephemeral" } },
+        },
+      },
+      {
+        role: "user",
+        content: `Error fingerprint: ${input.errorFingerprint}\nFirst observed: ${input.errorTimestamp}\n\nQuery the error metrics, decide severity, return the structured report.`,
+      },
+    ],
     tools: {
       query_errors: queryErrors,
       query_affected_users: queryAffectedUsers,
@@ -46,13 +62,21 @@ export async function runFrequencyAnalyzer(
     stopWhen: stepCountIs(6),
   });
 
-  const { object } = await generateObject({
-    model: anthropic("claude-sonnet-4-6"),
+  if (sessionId) {
+    recordUsage(sessionId, extractUsage(investigation, "frequency-analyzer", MODEL));
+  }
+
+  const coercion = await generateObject({
+    model: anthropic(MODEL),
     schema: Schema,
     system:
       "You are coercing frequency-analyzer's investigation into a structured result. Be faithful to the numbers in the transcript.",
     prompt: `Investigation transcript:\n\n${investigation.text}\n\nProduce the structured FrequencyAnalyzerResult.`,
   });
 
-  return { lane: "frequency-analyzer", ...object };
+  if (sessionId) {
+    recordUsage(sessionId, extractUsage(coercion, "coercion", MODEL));
+  }
+
+  return { lane: "frequency-analyzer", ...coercion.object };
 }

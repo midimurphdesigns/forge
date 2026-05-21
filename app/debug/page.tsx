@@ -31,6 +31,30 @@ type LaneCalibration = {
 
 type CalibrationMap = Record<LaneName, LaneCalibration>;
 
+type LaneCostBreakdown = {
+  lane: LaneName | "coercion";
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  inputUsd: number;
+  outputUsd: number;
+  cacheReadUsd: number;
+  cacheCreationUsd: number;
+  totalUsd: number;
+  cacheHitRate: number;
+};
+
+type CostSummary = {
+  perLane: LaneCostBreakdown[];
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  totalUsd: number;
+  cacheHitRate: number;
+};
+
 type Frame =
   | { type: "session:open"; sessionId: string }
   | { type: "session:resume"; sessionId: string }
@@ -52,6 +76,7 @@ type Frame =
       totalDurationMs: number;
       speculatorMetrics: SpeculatorMetrics | null;
       calibration: CalibrationMap;
+      cost: CostSummary | null;
     }
   | { type: "fatal"; reason: string };
 
@@ -84,6 +109,7 @@ export default function DebugPage() {
     null,
   );
   const [calibration, setCalibration] = useState<CalibrationMap | null>(null);
+  const [cost, setCost] = useState<CostSummary | null>(null);
   const [running, setRunning] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -162,6 +188,7 @@ export default function DebugPage() {
       setTotalDurationMs(frame.totalDurationMs);
       setSpeculatorMetrics(frame.speculatorMetrics);
       setCalibration(frame.calibration);
+      setCost(frame.cost);
     } else if (frame.type === "fatal") {
       setFatal(frame.reason);
     }
@@ -199,6 +226,7 @@ export default function DebugPage() {
     setTotalDurationMs(null);
     setSpeculatorMetrics(null);
     setCalibration(null);
+    setCost(null);
     setFatal(null);
     setRunning(true);
     clearUrl();
@@ -223,6 +251,7 @@ export default function DebugPage() {
     setTotalDurationMs(null);
     setSpeculatorMetrics(null);
     setCalibration(null);
+    setCost(null);
     setFatal(null);
     setRunning(true);
     try {
@@ -371,6 +400,37 @@ export default function DebugPage() {
                 </div>
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {cost && cost.perLane.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-lg font-bold">cost</h2>
+          <p className="text-xs text-gray-500">
+            ${cost.totalUsd.toFixed(4)} total · {cost.totalInputTokens.toLocaleString()}{" "}
+            input · {cost.totalOutputTokens.toLocaleString()} output ·{" "}
+            {cost.totalCacheReadTokens.toLocaleString()} cache-read ·{" "}
+            {Math.round(cost.cacheHitRate * 100)}% cache hit rate
+          </p>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {cost.perLane.map((l) => (
+              <div
+                key={l.lane}
+                className="rounded border border-gray-200 p-3 text-xs dark:border-gray-800"
+              >
+                <div className="font-bold">{l.lane}</div>
+                <div className="text-gray-500">
+                  ${l.totalUsd.toFixed(4)} | in {l.inputTokens.toLocaleString()} | out{" "}
+                  {l.outputTokens.toLocaleString()}
+                </div>
+                <div className="text-gray-500">
+                  cache: read {l.cacheReadTokens.toLocaleString()} (${l.cacheReadUsd.toFixed(4)})
+                  | write {l.cacheCreationTokens.toLocaleString()} (${l.cacheCreationUsd.toFixed(4)})
+                  | hit {Math.round(l.cacheHitRate * 100)}%
+                </div>
+              </div>
+            ))}
           </div>
         </section>
       )}

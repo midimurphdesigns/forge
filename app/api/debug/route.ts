@@ -98,6 +98,7 @@ export async function GET(req: Request): Promise<Response> {
               totalDurationMs: state.totalDurationMs,
               speculatorMetrics: state.speculatorMetrics,
               calibration,
+              cost: state.cost,
             })}\n\n`,
           ),
         );

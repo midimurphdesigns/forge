@@ -1,8 +1,12 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
+import { extractUsage } from "@/lib/cost";
+import { recordUsage } from "@/lib/store";
 import { buildGithubTools } from "@/lib/tools/github";
 import type { BlameCorrelatorResult, DebugInput } from "@/lib/types";
+
+const MODEL = "claude-sonnet-4-6";
 
 const Schema = z.object({
   candidates: z.array(
@@ -25,13 +29,27 @@ Do NOT analyze the code's correctness in detail. Do NOT estimate user impact. Ot
 
 Use git_log to find commits in a window around the error timestamp, git_diff to inspect candidates, and git_blame when you need to verify who touched a specific line.`;
 
-export async function runBlameCorrelator(input: DebugInput): Promise<BlameCorrelatorResult> {
+export async function runBlameCorrelator(
+  input: DebugInput,
+  sessionId?: string,
+): Promise<BlameCorrelatorResult> {
   const tools = buildGithubTools();
 
   const investigation = await generateText({
-    model: anthropic("claude-sonnet-4-6"),
-    system: SYSTEM,
-    prompt: `Error timestamp: ${input.errorTimestamp}\nDeployed SHA: ${input.deployedSha}\nRepo: ${input.repoUrl}\nStack trace excerpt:\n\n${input.stackTrace.split("\n").slice(0, 6).join("\n")}\n\nFind suspect commits in the 48h preceding the error timestamp. Rank by relevance.`,
+    model: anthropic(MODEL),
+    messages: [
+      {
+        role: "system",
+        content: SYSTEM,
+        providerOptions: {
+          anthropic: { cacheControl: { type: "ephemeral" } },
+        },
+      },
+      {
+        role: "user",
+        content: `Error timestamp: ${input.errorTimestamp}\nDeployed SHA: ${input.deployedSha}\nRepo: ${input.repoUrl}\nStack trace excerpt:\n\n${input.stackTrace.split("\n").slice(0, 6).join("\n")}\n\nFind suspect commits in the 48h preceding the error timestamp. Rank by relevance.`,
+      },
+    ],
     tools: {
       git_log: tools.git_log,
       git_diff: tools.git_diff,
@@ -40,13 +58,21 @@ export async function runBlameCorrelator(input: DebugInput): Promise<BlameCorrel
     stopWhen: stepCountIs(8),
   });
 
-  const { object } = await generateObject({
-    model: anthropic("claude-sonnet-4-6"),
+  if (sessionId) {
+    recordUsage(sessionId, extractUsage(investigation, "blame-correlator", MODEL));
+  }
+
+  const coercion = await generateObject({
+    model: anthropic(MODEL),
     schema: Schema,
     system:
       "You are coercing blame-correlator's investigation into a structured result. Be faithful; do not invent commit SHAs that did not appear in the transcript.",
     prompt: `Investigation transcript:\n\n${investigation.text}\n\nProduce the structured BlameCorrelatorResult.`,
   });
 
-  return { lane: "blame-correlator", ...object };
+  if (sessionId) {
+    recordUsage(sessionId, extractUsage(coercion, "coercion", MODEL));
+  }
+
+  return { lane: "blame-correlator", ...coercion.object };
 }

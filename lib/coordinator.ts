@@ -4,6 +4,7 @@ import { runFrequencyAnalyzer } from "@/lib/agents/frequency-analyzer";
 import { runReproDrafter } from "@/lib/agents/repro-drafter";
 import { runSourceReader } from "@/lib/agents/source-reader";
 import { getCalibration, logOutcome, type LaneCalibration } from "@/lib/calibration";
+import type { CostSummary } from "@/lib/cost";
 import { findScenario } from "@/lib/eval/scenarios";
 import {
   scoreBlameCorrelator,
@@ -12,8 +13,10 @@ import {
   scoreSourceReader,
 } from "@/lib/eval/rubric";
 import {
+  clearCost,
   isLaneAborted,
   sessionStore,
+  summarizeCost,
   type SpeculatorMetricsSnapshot,
 } from "@/lib/store";
 import type {
@@ -29,9 +32,9 @@ type LaneRunner = (input: DebugInput, sessionId: string) => Promise<LaneResult>;
 
 const LANES: Array<{ name: LaneName; run: LaneRunner }> = [
   { name: "source-reader", run: (i, sid) => runSourceReader(i, sid) },
-  { name: "blame-correlator", run: (i) => runBlameCorrelator(i) },
-  { name: "frequency-analyzer", run: (i) => runFrequencyAnalyzer(i) },
-  { name: "repro-drafter", run: (i) => runReproDrafter(i) },
+  { name: "blame-correlator", run: (i, sid) => runBlameCorrelator(i, sid) },
+  { name: "frequency-analyzer", run: (i, sid) => runFrequencyAnalyzer(i, sid) },
+  { name: "repro-drafter", run: (i, sid) => runReproDrafter(i, sid) },
 ];
 
 export type ProgressEvent =
@@ -46,6 +49,7 @@ export type ProgressEvent =
       totalDurationMs: number;
       speculatorMetrics: SpeculatorMetricsSnapshot | null;
       calibration: Record<LaneName, LaneCalibration>;
+      cost: CostSummary | null;
     };
 
 export async function runCoordinator(
@@ -133,6 +137,7 @@ export async function runCoordinator(
   const calibration = await getCalibration();
   const hypotheses = mergeHypotheses(outcomes, calibration);
   const totalDurationMs = Date.now() - startedAt;
+  const cost = summarizeCost(sessionId);
 
   const finalState = await sessionStore.patch(sessionId, (s) => ({
     ...s,
@@ -141,6 +146,7 @@ export async function runCoordinator(
     outcomes,
     hypotheses,
     totalDurationMs,
+    cost,
   }));
 
   await logSessionOutcomes(sessionId, outcomes, input);
@@ -151,7 +157,10 @@ export async function runCoordinator(
     totalDurationMs,
     speculatorMetrics: finalState.speculatorMetrics,
     calibration,
+    cost,
   });
+
+  clearCost(sessionId);
 
   return { outcomes, hypotheses, totalDurationMs };
 }

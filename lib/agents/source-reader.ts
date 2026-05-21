@@ -1,10 +1,13 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
+import { extractUsage } from "@/lib/cost";
 import { Speculator } from "@/lib/speculator";
-import { sessionStore } from "@/lib/store";
+import { recordUsage, sessionStore } from "@/lib/store";
 import { buildGithubTools } from "@/lib/tools/github";
 import type { DebugInput, SourceReaderResult } from "@/lib/types";
+
+const MODEL = "claude-sonnet-4-6";
 
 const Schema = z.object({
   file: z.string(),
@@ -42,9 +45,20 @@ export async function runSourceReader(
   const tools = buildGithubTools(speculator);
 
   const investigation = await generateText({
-    model: anthropic("claude-sonnet-4-6"),
-    system: SYSTEM,
-    prompt: `Stack trace:\n\n${input.stackTrace}\n\nRepo: ${input.repoUrl}\nDeployed SHA: ${input.deployedSha}\n\nIdentify the file and line range most likely responsible. Read the code, capture the snippet and surrounding context.`,
+    model: anthropic(MODEL),
+    messages: [
+      {
+        role: "system",
+        content: SYSTEM,
+        providerOptions: {
+          anthropic: { cacheControl: { type: "ephemeral" } },
+        },
+      },
+      {
+        role: "user",
+        content: `Stack trace:\n\n${input.stackTrace}\n\nRepo: ${input.repoUrl}\nDeployed SHA: ${input.deployedSha}\n\nIdentify the file and line range most likely responsible. Read the code, capture the snippet and surrounding context.`,
+      },
+    ],
     tools: {
       fetch_file: tools.fetch_file,
       fetch_directory: tools.fetch_directory,
@@ -52,13 +66,21 @@ export async function runSourceReader(
     stopWhen: stepCountIs(6),
   });
 
-  const { object } = await generateObject({
-    model: anthropic("claude-sonnet-4-6"),
+  if (sessionId) {
+    recordUsage(sessionId, extractUsage(investigation, "source-reader", MODEL));
+  }
+
+  const coercion = await generateObject({
+    model: anthropic(MODEL),
     schema: Schema,
     system:
       "You are coercing source-reader's investigation into a structured result. Be faithful to the investigation; do not invent details.",
     prompt: `Investigation transcript:\n\n${investigation.text}\n\nProduce the structured SourceReaderResult.`,
   });
+
+  if (sessionId) {
+    recordUsage(sessionId, extractUsage(coercion, "coercion", MODEL));
+  }
 
   if (sessionId) {
     const m = speculator.getMetrics();
@@ -74,5 +96,5 @@ export async function runSourceReader(
     }));
   }
 
-  return { lane: "source-reader", ...object };
+  return { lane: "source-reader", ...coercion.object };
 }
