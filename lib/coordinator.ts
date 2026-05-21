@@ -4,6 +4,13 @@ import { runFrequencyAnalyzer } from "@/lib/agents/frequency-analyzer";
 import { runReproDrafter } from "@/lib/agents/repro-drafter";
 import { runSourceReader } from "@/lib/agents/source-reader";
 import { getCalibration, logOutcome, type LaneCalibration } from "@/lib/calibration";
+import { findScenario } from "@/lib/eval/scenarios";
+import {
+  scoreBlameCorrelator,
+  scoreFrequencyAnalyzer,
+  scoreReproDrafter,
+  scoreSourceReader,
+} from "@/lib/eval/rubric";
 import {
   isLaneAborted,
   sessionStore,
@@ -136,7 +143,7 @@ export async function runCoordinator(
     totalDurationMs,
   }));
 
-  await logSessionOutcomes(sessionId, outcomes);
+  await logSessionOutcomes(sessionId, outcomes, input);
 
   onProgress?.({
     type: "merge",
@@ -152,12 +159,15 @@ export async function runCoordinator(
 async function logSessionOutcomes(
   sessionId: string,
   outcomes: LaneOutcome[],
+  input: DebugInput,
 ): Promise<void> {
+  const scenario = findScenario(input.errorFingerprint);
+  if (!scenario) return;
   const timestamp = new Date().toISOString();
   for (const o of outcomes) {
     if (o.status !== "fulfilled") continue;
     const predicted = o.value.confidence;
-    const outcome = stubCorrectnessOracle(o.value);
+    const outcome = correctnessFromRubric(o.value, scenario.groundTruth);
     await logOutcome({
       lane: o.lane,
       predicted,
@@ -168,17 +178,19 @@ async function logSessionOutcomes(
   }
 }
 
-function stubCorrectnessOracle(result: LaneResult): 0 | 1 {
-  if (result.lane === "source-reader") {
-    return result.file === "src/auth/session.ts" ? 1 : 0;
-  }
-  if (result.lane === "blame-correlator") {
-    return result.topSuspect === "a3f1c92" ? 1 : 0;
-  }
-  if (result.lane === "frequency-analyzer") {
-    return result.severityClass === "p1" || result.severityClass === "p0" ? 1 : 0;
-  }
-  return result.confidence >= 0.5 ? 1 : 0;
+function correctnessFromRubric(
+  result: LaneResult,
+  gt: ReturnType<typeof findScenario> extends infer S
+    ? S extends { groundTruth: infer G }
+      ? G
+      : never
+    : never,
+): 0 | 1 {
+  if (!gt) return 0;
+  if (result.lane === "source-reader") return scoreSourceReader(result, gt).brierOutcome;
+  if (result.lane === "blame-correlator") return scoreBlameCorrelator(result, gt).brierOutcome;
+  if (result.lane === "frequency-analyzer") return scoreFrequencyAnalyzer(result, gt).brierOutcome;
+  return scoreReproDrafter(result, gt).brierOutcome;
 }
 
 function mergeHypotheses(
