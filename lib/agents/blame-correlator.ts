@@ -1,7 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject, generateText, stepCountIs } from "ai";
 import { z } from "zod";
-import { gitBlame, gitDiff, gitLog } from "@/lib/tools/github";
+import { buildGithubTools } from "@/lib/tools/github";
 import type { BlameCorrelatorResult, DebugInput } from "@/lib/types";
 
 const Schema = z.object({
@@ -26,11 +26,17 @@ Do NOT analyze the code's correctness in detail. Do NOT estimate user impact. Ot
 Use git_log to find commits in a window around the error timestamp, git_diff to inspect candidates, and git_blame when you need to verify who touched a specific line.`;
 
 export async function runBlameCorrelator(input: DebugInput): Promise<BlameCorrelatorResult> {
+  const tools = buildGithubTools();
+
   const investigation = await generateText({
     model: anthropic("claude-sonnet-4-6"),
     system: SYSTEM,
     prompt: `Error timestamp: ${input.errorTimestamp}\nDeployed SHA: ${input.deployedSha}\nRepo: ${input.repoUrl}\nStack trace excerpt:\n\n${input.stackTrace.split("\n").slice(0, 6).join("\n")}\n\nFind suspect commits in the 48h preceding the error timestamp. Rank by relevance.`,
-    tools: { git_log: gitLog, git_diff: gitDiff, git_blame: gitBlame },
+    tools: {
+      git_log: tools.git_log,
+      git_diff: tools.git_diff,
+      git_blame: tools.git_blame,
+    },
     stopWhen: stepCountIs(8),
   });
 

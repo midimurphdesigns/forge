@@ -88,11 +88,16 @@ export async function GET(req: Request): Promise<Response> {
       }
 
       if (state.status === "complete" && state.totalDurationMs !== null) {
-        send({
-          type: "merge",
-          hypotheses: state.hypotheses,
-          totalDurationMs: state.totalDurationMs,
-        });
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${JSON.stringify({
+              type: "merge",
+              hypotheses: state.hypotheses,
+              totalDurationMs: state.totalDurationMs,
+              speculatorMetrics: state.speculatorMetrics,
+            })}\n\n`,
+          ),
+        );
       }
 
       controller.close();

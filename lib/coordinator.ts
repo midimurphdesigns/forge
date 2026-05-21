@@ -3,7 +3,11 @@ import { runBlameCorrelator } from "@/lib/agents/blame-correlator";
 import { runFrequencyAnalyzer } from "@/lib/agents/frequency-analyzer";
 import { runReproDrafter } from "@/lib/agents/repro-drafter";
 import { runSourceReader } from "@/lib/agents/source-reader";
-import { isLaneAborted, sessionStore } from "@/lib/store";
+import {
+  isLaneAborted,
+  sessionStore,
+  type SpeculatorMetricsSnapshot,
+} from "@/lib/store";
 import type {
   CoordinatorResult,
   DebugInput,
@@ -13,13 +17,13 @@ import type {
   LaneResult,
 } from "@/lib/types";
 
-type LaneRunner = (input: DebugInput) => Promise<LaneResult>;
+type LaneRunner = (input: DebugInput, sessionId: string) => Promise<LaneResult>;
 
 const LANES: Array<{ name: LaneName; run: LaneRunner }> = [
-  { name: "source-reader", run: runSourceReader },
-  { name: "blame-correlator", run: runBlameCorrelator },
-  { name: "frequency-analyzer", run: runFrequencyAnalyzer },
-  { name: "repro-drafter", run: runReproDrafter },
+  { name: "source-reader", run: (i, sid) => runSourceReader(i, sid) },
+  { name: "blame-correlator", run: (i) => runBlameCorrelator(i) },
+  { name: "frequency-analyzer", run: (i) => runFrequencyAnalyzer(i) },
+  { name: "repro-drafter", run: (i) => runReproDrafter(i) },
 ];
 
 export type ProgressEvent =
@@ -28,7 +32,12 @@ export type ProgressEvent =
   | { type: "lane:done"; lane: LaneName; durationMs: number; result: LaneResult }
   | { type: "lane:error"; lane: LaneName; durationMs: number; reason: string }
   | { type: "lane:aborted"; lane: LaneName; durationMs: number }
-  | { type: "merge"; hypotheses: Hypothesis[]; totalDurationMs: number };
+  | {
+      type: "merge";
+      hypotheses: Hypothesis[];
+      totalDurationMs: number;
+      speculatorMetrics: SpeculatorMetricsSnapshot | null;
+    };
 
 export async function runCoordinator(
   sessionId: string,
@@ -69,7 +78,7 @@ export async function runCoordinator(
         onProgress?.({ type: "lane:start", lane: lane.name });
 
         try {
-          const value = await lane.run(input);
+          const value = await lane.run(input, sessionId);
           const durationMs = Date.now() - laneStart;
 
           if (isLaneAborted(sessionId, lane.name)) {
@@ -115,7 +124,7 @@ export async function runCoordinator(
   const hypotheses = mergeHypotheses(outcomes);
   const totalDurationMs = Date.now() - startedAt;
 
-  await sessionStore.patch(sessionId, (s) => ({
+  const finalState = await sessionStore.patch(sessionId, (s) => ({
     ...s,
     status: "complete",
     finishedAt: Date.now(),
@@ -124,7 +133,12 @@ export async function runCoordinator(
     totalDurationMs,
   }));
 
-  onProgress?.({ type: "merge", hypotheses, totalDurationMs });
+  onProgress?.({
+    type: "merge",
+    hypotheses,
+    totalDurationMs,
+    speculatorMetrics: finalState.speculatorMetrics,
+  });
 
   return { outcomes, hypotheses, totalDurationMs };
 }

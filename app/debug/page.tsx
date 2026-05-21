@@ -13,6 +13,13 @@ type LaneState = {
   error: string | null;
 };
 
+type SpeculatorMetrics = {
+  predictions: number;
+  hits: number;
+  misses: number;
+  inFlight: number;
+};
+
 type Frame =
   | { type: "session:open"; sessionId: string }
   | { type: "session:resume"; sessionId: string }
@@ -28,7 +35,12 @@ type Frame =
       result: LaneResult | null;
       error: string | null;
     }
-  | { type: "merge"; hypotheses: Hypothesis[]; totalDurationMs: number }
+  | {
+      type: "merge";
+      hypotheses: Hypothesis[];
+      totalDurationMs: number;
+      speculatorMetrics: SpeculatorMetrics | null;
+    }
   | { type: "fatal"; reason: string };
 
 const LANE_ORDER: LaneName[] = [
@@ -56,6 +68,9 @@ export default function DebugPage() {
   const [lanes, setLanes] = useState<Record<LaneName, LaneState>>(INITIAL_STATE);
   const [hypotheses, setHypotheses] = useState<Hypothesis[]>([]);
   const [totalDurationMs, setTotalDurationMs] = useState<number | null>(null);
+  const [speculatorMetrics, setSpeculatorMetrics] = useState<SpeculatorMetrics | null>(
+    null,
+  );
   const [running, setRunning] = useState(false);
   const [fatal, setFatal] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -132,6 +147,7 @@ export default function DebugPage() {
     } else if (frame.type === "merge") {
       setHypotheses(frame.hypotheses);
       setTotalDurationMs(frame.totalDurationMs);
+      setSpeculatorMetrics(frame.speculatorMetrics);
     } else if (frame.type === "fatal") {
       setFatal(frame.reason);
     }
@@ -167,6 +183,7 @@ export default function DebugPage() {
     setLanes(INITIAL_STATE);
     setHypotheses([]);
     setTotalDurationMs(null);
+    setSpeculatorMetrics(null);
     setFatal(null);
     setRunning(true);
     clearUrl();
@@ -189,6 +206,7 @@ export default function DebugPage() {
     setLanes(INITIAL_STATE);
     setHypotheses([]);
     setTotalDurationMs(null);
+    setSpeculatorMetrics(null);
     setFatal(null);
     setRunning(true);
     try {
@@ -237,6 +255,16 @@ export default function DebugPage() {
         </button>
         {totalDurationMs !== null && (
           <span className="text-xs text-gray-500">wall-clock {totalDurationMs}ms</span>
+        )}
+        {speculatorMetrics && speculatorMetrics.predictions > 0 && (
+          <span className="text-xs text-gray-500">
+            speculator{" "}
+            {speculatorMetrics.hits}/{speculatorMetrics.predictions} hit (
+            {Math.round(
+              (speculatorMetrics.hits / speculatorMetrics.predictions) * 100,
+            )}
+            %)
+          </span>
         )}
       </section>
 

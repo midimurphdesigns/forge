@@ -2,6 +2,13 @@ import type { CoordinatorResult, LaneName, LaneOutcome, LaneResult } from "@/lib
 
 export type SessionStatus = "running" | "complete" | "aborted";
 
+export type SpeculatorMetricsSnapshot = {
+  predictions: number;
+  hits: number;
+  misses: number;
+  inFlight: number;
+};
+
 export type SessionState = {
   sessionId: string;
   status: SessionStatus;
@@ -15,6 +22,7 @@ export type SessionState = {
   hypotheses: CoordinatorResult["hypotheses"];
   totalDurationMs: number | null;
   abortedLanes: LaneName[];
+  speculatorMetrics: SpeculatorMetricsSnapshot | null;
 };
 
 export type LaneStatus = "queued" | "running" | "done" | "error" | "aborted";
@@ -54,6 +62,7 @@ class InMemoryStore implements SessionStore {
       hypotheses: [],
       totalDurationMs: null,
       abortedLanes: [],
+      speculatorMetrics: null,
     };
     this.sessions.set(sessionId, state);
     return state;
