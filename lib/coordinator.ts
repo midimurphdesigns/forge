@@ -184,6 +184,16 @@ export async function runCoordinator(
     ),
   );
 
+  // Log this run's outcomes FIRST so the calibration read on the
+  // next line includes the just-completed samples. Previously the
+  // order was reversed: read calibration -> log outcomes -> emit
+  // merge frame, which meant the merge frame's sampleCount was
+  // always one run behind and the only way to see your latest run
+  // reflected was to refresh the page (which fires the resume GET
+  // and re-reads calibration). Now the merge frame is up-to-date
+  // in real time.
+  await logSessionOutcomes(sessionId, outcomes, input);
+
   const calibration = await getCalibration();
   const hypotheses = mergeHypotheses(outcomes, calibration);
   const totalDurationMs = Date.now() - startedAt;
@@ -198,8 +208,6 @@ export async function runCoordinator(
     totalDurationMs,
     cost,
   }));
-
-  await logSessionOutcomes(sessionId, outcomes, input);
 
   onProgress?.({
     type: "merge",
