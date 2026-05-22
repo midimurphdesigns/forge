@@ -274,66 +274,71 @@ export default function DebugPage() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-8 p-8 font-mono">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">forge / debug</h1>
-        <p className="text-sm text-gray-500">
-          parallel multi-agent investigation. resumable + per-lane interrupt.
+    <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-10 px-6 py-16">
+      <header className="flex flex-col gap-3">
+        <h1 className="font-display text-[88px] leading-[0.95] tracking-tight">
+          forge <span className="text-[var(--color-ink-faint)]">/ debug</span>
+        </h1>
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+          parallel multi-agent investigation · resumable · per-lane interrupt
         </p>
         {sessionId && (
-          <p className="text-xs text-gray-500">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
             session{" "}
-            <span className="font-bold text-cyan-400">{sessionId.slice(0, 8)}</span>{" "}
-            (refresh this page to resume)
+            <span className="text-[var(--color-accent)]">{sessionId.slice(0, 8)}</span>{" "}
+            · refresh to resume
           </p>
         )}
       </header>
 
-      <section className="flex items-center gap-3">
+      <section className="flex flex-wrap items-center gap-4">
         <button
           type="button"
           onClick={run}
           disabled={running}
-          className="rounded bg-cyan-400 px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
+          className="rounded border border-[var(--color-accent)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-[var(--color-canvas)] transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {running ? "investigating..." : "run sample investigation"}
         </button>
         {totalDurationMs !== null && (
-          <span className="text-xs text-gray-500">wall-clock {totalDurationMs}ms</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+            wall-clock {totalDurationMs}ms
+          </span>
         )}
         {speculatorMetrics && speculatorMetrics.predictions > 0 && (
-          <span className="text-xs text-gray-500">
-            speculator{" "}
-            {speculatorMetrics.hits}/{speculatorMetrics.predictions} hit (
-            {Math.round(
-              (speculatorMetrics.hits / speculatorMetrics.predictions) * 100,
-            )}
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+            speculator {speculatorMetrics.hits}/{speculatorMetrics.predictions} (
+            {Math.round((speculatorMetrics.hits / speculatorMetrics.predictions) * 100)}
             %)
           </span>
         )}
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {LANE_ORDER.map((laneName) => {
           const lane = lanes[laneName];
           const canInterrupt = lane.status === "running" && sessionId !== null;
           return (
             <article
               key={laneName}
-              className="flex flex-col gap-2 rounded border border-gray-200 p-4 dark:border-gray-800"
+              className="flex flex-col gap-3 rounded border border-[var(--color-divider)] bg-[var(--color-canvas-elev-1)] p-5"
             >
-              <header className="flex items-baseline justify-between">
-                <div>
-                  <h2 className="text-sm font-bold">{laneName}</h2>
-                  <p className="text-xs text-gray-500">{LANE_DESCRIPTIONS[laneName]}</p>
+              <header className="flex items-baseline justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <h2 className="font-mono text-sm font-bold text-[var(--color-ink)]">
+                    {laneName}
+                  </h2>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+                    {LANE_DESCRIPTIONS[laneName]}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <StatusBadge status={lane.status} durationMs={lane.durationMs} />
                   {canInterrupt && (
                     <button
                       type="button"
                       onClick={() => interrupt(laneName)}
-                      className="text-[10px] uppercase text-red-400 underline underline-offset-2"
+                      className="font-mono text-[10px] uppercase tracking-[0.18em] text-red-400 underline underline-offset-2"
                     >
                       stop
                     </button>
@@ -347,24 +352,28 @@ export default function DebugPage() {
       </section>
 
       {hypotheses.length > 0 && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-bold">ranked hypotheses</h2>
+        <section className="flex flex-col gap-4">
+          <h2 className="font-display text-[40px] leading-none tracking-tight">
+            ranked hypotheses
+          </h2>
           {hypotheses.map((h, i) => (
             <article
               key={i}
-              className="rounded border border-cyan-400/40 bg-cyan-50/30 p-4 dark:bg-cyan-950/20"
+              className="rounded border-l-2 border-[var(--color-accent)] bg-[var(--color-canvas-elev-1)] p-5"
             >
-              <header className="flex items-baseline justify-between">
-                <h3 className="text-sm font-bold">{h.title}</h3>
-                <span className="text-xs text-gray-500">
+              <header className="flex items-baseline justify-between gap-3">
+                <h3 className="text-sm font-medium text-[var(--color-ink)]">
+                  {h.title}
+                </h3>
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-accent)]">
                   conf {(h.confidence * 100).toFixed(0)}%
                 </span>
               </header>
-              <p className="mt-2 whitespace-pre-wrap text-xs text-gray-700 dark:text-gray-300">
+              <p className="mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
                 {h.description}
               </p>
-              <footer className="mt-2 text-xs text-gray-500">
-                supported by: {h.supportingLanes.join(", ")}
+              <footer className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+                supported by: {h.supportingLanes.join(" · ")}
               </footer>
             </article>
           ))}
@@ -372,29 +381,31 @@ export default function DebugPage() {
       )}
 
       {calibration && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-lg font-bold">calibration</h2>
-          <p className="text-xs text-gray-500">
-            Brier score per lane (lower is better; 0 = perfect, 0.25 = uncalibrated).
-            Weight is applied to confidence on next run. Stub correctness oracle until
-            Phase 5 ships the real eval harness.
+        <section className="flex flex-col gap-3">
+          <h2 className="font-display text-[40px] leading-none tracking-tight">
+            calibration
+          </h2>
+          <p className="text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
+            Brier score per lane (lower is better; 0 = perfect, 0.25 = uncalibrated). Weight is applied to confidence on next run.
           </p>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {LANE_ORDER.map((laneName) => {
               const c = calibration[laneName];
               return (
                 <div
                   key={laneName}
-                  className="rounded border border-gray-200 p-3 text-xs dark:border-gray-800"
+                  className="rounded border border-[var(--color-divider)] bg-[var(--color-canvas-elev-1)] p-4"
                 >
-                  <div className="font-bold">{laneName}</div>
-                  <div className="text-gray-500">
-                    samples: {c.sampleCount} | brier:{" "}
-                    {c.brierScore === null ? "—" : c.brierScore.toFixed(3)} | weight:{" "}
+                  <div className="font-mono text-sm font-bold text-[var(--color-ink)]">
+                    {laneName}
+                  </div>
+                  <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
+                    samples {c.sampleCount} · brier{" "}
+                    {c.brierScore === null ? "—" : c.brierScore.toFixed(3)} · weight{" "}
                     {c.weight.toFixed(2)}
                   </div>
-                  <div className="text-gray-500">
-                    mean predicted {c.meanPredicted.toFixed(2)} vs mean outcome{" "}
+                  <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">
+                    predicted {c.meanPredicted.toFixed(2)} vs outcome{" "}
                     {c.meanOutcome.toFixed(2)}
                   </div>
                 </div>
@@ -405,29 +416,31 @@ export default function DebugPage() {
       )}
 
       {cost && cost.perLane.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-lg font-bold">cost</h2>
-          <p className="text-xs text-gray-500">
+        <section className="flex flex-col gap-3">
+          <h2 className="font-display text-[40px] leading-none tracking-tight">cost</h2>
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
             ${cost.totalUsd.toFixed(4)} total · {cost.totalInputTokens.toLocaleString()}{" "}
             input · {cost.totalOutputTokens.toLocaleString()} output ·{" "}
             {cost.totalCacheReadTokens.toLocaleString()} cache-read ·{" "}
-            {Math.round(cost.cacheHitRate * 100)}% cache hit rate
+            {Math.round(cost.cacheHitRate * 100)}% hit rate
           </p>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {cost.perLane.map((l) => (
               <div
                 key={l.lane}
-                className="rounded border border-gray-200 p-3 text-xs dark:border-gray-800"
+                className="rounded border border-[var(--color-divider)] bg-[var(--color-canvas-elev-1)] p-4"
               >
-                <div className="font-bold">{l.lane}</div>
-                <div className="text-gray-500">
-                  ${l.totalUsd.toFixed(4)} | in {l.inputTokens.toLocaleString()} | out{" "}
+                <div className="font-mono text-sm font-bold text-[var(--color-ink)]">
+                  {l.lane}
+                </div>
+                <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
+                  ${l.totalUsd.toFixed(4)} · in {l.inputTokens.toLocaleString()} · out{" "}
                   {l.outputTokens.toLocaleString()}
                 </div>
-                <div className="text-gray-500">
-                  cache: read {l.cacheReadTokens.toLocaleString()} (${l.cacheReadUsd.toFixed(4)})
-                  | write {l.cacheCreationTokens.toLocaleString()} (${l.cacheCreationUsd.toFixed(4)})
-                  | hit {Math.round(l.cacheHitRate * 100)}%
+                <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">
+                  cache: read {l.cacheReadTokens.toLocaleString()} · write{" "}
+                  {l.cacheCreationTokens.toLocaleString()} · hit{" "}
+                  {Math.round(l.cacheHitRate * 100)}%
                 </div>
               </div>
             ))}
@@ -436,9 +449,11 @@ export default function DebugPage() {
       )}
 
       {fatal && (
-        <section className="rounded border border-red-400 bg-red-50/30 p-4 dark:bg-red-950/20">
-          <h2 className="text-sm font-bold text-red-700 dark:text-red-300">fatal</h2>
-          <p className="text-xs text-red-700 dark:text-red-300">{fatal}</p>
+        <section className="rounded border-l-2 border-red-400 bg-red-950/20 p-4">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-red-300">
+            fatal
+          </h2>
+          <p className="mt-2 text-[13px] text-red-200">{fatal}</p>
         </section>
       )}
     </main>
@@ -454,16 +469,18 @@ function StatusBadge({
 }) {
   const color =
     status === "done"
-      ? "text-cyan-400"
+      ? "text-[var(--color-accent)]"
       : status === "running"
         ? "text-yellow-400"
         : status === "error"
           ? "text-red-400"
           : status === "aborted"
             ? "text-orange-400"
-            : "text-gray-400";
+            : "text-[var(--color-ink-faint)]";
   return (
-    <span className={`text-xs uppercase ${color}`}>
+    <span
+      className={`font-mono text-[10px] uppercase tracking-[0.18em] ${color}`}
+    >
       {status}
       {durationMs !== null && status !== "running" ? ` ${durationMs}ms` : ""}
     </span>
@@ -472,13 +489,23 @@ function StatusBadge({
 
 function LaneBody({ lane }: { lane: LaneState }) {
   if (lane.status === "queued") {
-    return <p className="text-xs text-gray-400">waiting...</p>;
+    return (
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+        waiting...
+      </p>
+    );
   }
   if (lane.status === "running") {
-    return <p className="text-xs text-gray-400">working...</p>;
+    return (
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-yellow-400">
+        working...
+      </p>
+    );
   }
   if (lane.status === "error" || lane.status === "aborted") {
-    return <p className="text-xs text-red-500">{lane.error ?? "no detail"}</p>;
+    return (
+      <p className="text-[12px] text-red-300">{lane.error ?? "no detail"}</p>
+    );
   }
   if (lane.result) {
     return <ResultBody result={lane.result} />;
@@ -486,19 +513,24 @@ function LaneBody({ lane }: { lane: LaneState }) {
   return null;
 }
 
+const META_LABEL =
+  "font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]";
+
 function ResultBody({ result }: { result: LaneResult }) {
   if (result.lane === "source-reader") {
     return (
-      <div className="flex flex-col gap-1 text-xs">
+      <div className="flex flex-col gap-2 text-[13px] text-[var(--color-ink-muted)]">
         <div>
-          <span className="text-gray-500">file:</span> {result.file}:
+          <span className={META_LABEL}>file</span> {result.file}:
           {result.lineRange[0]}-{result.lineRange[1]}
         </div>
         <div>
-          <span className="text-gray-500">conf:</span>{" "}
-          {(result.confidence * 100).toFixed(0)}%
+          <span className={META_LABEL}>conf</span>{" "}
+          <span className="text-[var(--color-accent)]">
+            {(result.confidence * 100).toFixed(0)}%
+          </span>
         </div>
-        <pre className="mt-1 overflow-x-auto rounded bg-black/5 p-2 text-[10px] dark:bg-white/5">
+        <pre className="mt-1 overflow-x-auto rounded border border-[var(--color-divider)] bg-[var(--color-canvas)] p-3 font-mono text-[10px] leading-relaxed text-[var(--color-ink-muted)]">
           {result.snippet}
         </pre>
       </div>
@@ -506,56 +538,64 @@ function ResultBody({ result }: { result: LaneResult }) {
   }
   if (result.lane === "blame-correlator") {
     return (
-      <div className="flex flex-col gap-1 text-xs">
+      <div className="flex flex-col gap-2 text-[13px] text-[var(--color-ink-muted)]">
         <div>
-          <span className="text-gray-500">top suspect:</span>{" "}
-          {result.topSuspect ?? "(none)"}
+          <span className={META_LABEL}>top suspect</span>{" "}
+          <span className="font-mono text-[var(--color-accent)]">
+            {result.topSuspect ?? "(none)"}
+          </span>
         </div>
         <div>
-          <span className="text-gray-500">candidates:</span> {result.candidates.length}
+          <span className={META_LABEL}>candidates</span> {result.candidates.length}
         </div>
         <div>
-          <span className="text-gray-500">conf:</span>{" "}
-          {(result.confidence * 100).toFixed(0)}%
+          <span className={META_LABEL}>conf</span>{" "}
+          <span className="text-[var(--color-accent)]">
+            {(result.confidence * 100).toFixed(0)}%
+          </span>
         </div>
       </div>
     );
   }
   if (result.lane === "frequency-analyzer") {
     return (
-      <div className="flex flex-col gap-1 text-xs">
+      <div className="flex flex-col gap-2 text-[13px] text-[var(--color-ink-muted)]">
         <div>
-          <span className="text-gray-500">severity:</span>{" "}
-          {result.severityClass.toUpperCase()}
+          <span className={META_LABEL}>severity</span>{" "}
+          <span className="font-mono text-[var(--color-accent)]">
+            {result.severityClass.toUpperCase()}
+          </span>
         </div>
         <div>
-          <span className="text-gray-500">occurrences:</span> {result.totalOccurrences}
+          <span className={META_LABEL}>occurrences</span> {result.totalOccurrences}
         </div>
         <div>
-          <span className="text-gray-500">affected users:</span> {result.affectedUsers}
+          <span className={META_LABEL}>affected users</span> {result.affectedUsers}
         </div>
         <div>
-          <span className="text-gray-500">spike:</span>{" "}
+          <span className={META_LABEL}>spike</span>{" "}
           {result.spikeDetected ? "yes" : "no"}
         </div>
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-1 text-xs">
+    <div className="flex flex-col gap-2 text-[13px] text-[var(--color-ink-muted)]">
       <div>
-        <span className="text-gray-500">steps:</span> {result.reproSteps.length}
+        <span className={META_LABEL}>steps</span> {result.reproSteps.length}
       </div>
       <div>
-        <span className="text-gray-500">env:</span> {result.reproEnvironment}
+        <span className={META_LABEL}>env</span> {result.reproEnvironment}
       </div>
       <div>
-        <span className="text-gray-500">conf:</span>{" "}
-        {(result.confidence * 100).toFixed(0)}%
+        <span className={META_LABEL}>conf</span>{" "}
+        <span className="text-[var(--color-accent)]">
+          {(result.confidence * 100).toFixed(0)}%
+        </span>
       </div>
       {result.knownGaps.length > 0 && (
         <div>
-          <span className="text-gray-500">gaps:</span> {result.knownGaps.join("; ")}
+          <span className={META_LABEL}>gaps</span> {result.knownGaps.join("; ")}
         </div>
       )}
     </div>

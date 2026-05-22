@@ -18,25 +18,28 @@ export default function Home() {
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-8 font-mono">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">forge</h1>
-        <p className="text-sm text-gray-500">
-          phase 1: streaming round-trip sanity check
+    <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-10 px-6 py-16">
+      <header className="flex flex-col gap-3">
+        <h1 className="font-display text-[88px] leading-[0.95] tracking-tight">forge</h1>
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
+          phase 1 — streaming round-trip
         </p>
         <a
           href="/debug"
-          className="text-xs text-cyan-400 underline underline-offset-2"
+          className="mt-2 inline-flex items-center gap-2 text-sm text-[var(--color-accent)]"
         >
-          → multi-agent debug surface
+          <span>multi-agent debug surface</span>
+          <span aria-hidden>→</span>
         </a>
       </header>
 
-      <section className="flex flex-1 flex-col gap-4">
+      <section className="flex flex-1 flex-col gap-5">
         {messages.map((m) => (
           <div key={m.id} className="flex flex-col gap-1">
-            <div className="text-xs uppercase text-gray-500">{m.role}</div>
-            <div className="whitespace-pre-wrap text-sm">
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+              {m.role}
+            </div>
+            <div className="whitespace-pre-wrap text-[15px] leading-relaxed text-[var(--color-ink)]">
               {m.parts.map((part, i) =>
                 part.type === "text" ? <span key={i}>{part.text}</span> : null,
               )}
@@ -44,7 +47,9 @@ export default function Home() {
           </div>
         ))}
         {status === "streaming" && (
-          <div className="text-xs text-gray-400">streaming...</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+            streaming...
+          </div>
         )}
       </section>
 
@@ -52,14 +57,14 @@ export default function Home() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="flex-1 rounded border border-gray-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-cyan-400"
+          className="flex-1 rounded border border-[var(--color-divider)] bg-[var(--color-canvas-elev-1)] px-3 py-2 text-sm text-[var(--color-ink)] outline-none transition-colors focus:border-[var(--color-accent)]"
           placeholder="say something..."
           disabled={status === "streaming"}
         />
         <button
           type="submit"
           disabled={status === "streaming" || !input.trim()}
-          className="rounded bg-cyan-400 px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
+          className="rounded border border-[var(--color-accent)] bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-[var(--color-canvas)] transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           send
         </button>
