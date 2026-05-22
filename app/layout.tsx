@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { geistMono, instrumentSerif, spaceGrotesk } from "@/lib/fonts";
 import Cursor from "@/components/Cursor";
 import "./globals.css";
@@ -7,6 +7,13 @@ export const metadata: Metadata = {
   title: "forge — multi-agent debugging concierge",
   description:
     "Point it at a stack trace, it spawns four specialist subagents in parallel and ranks hypotheses by confidence. Built on Vercel AI SDK + Anthropic.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0A0A0B",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -29,7 +36,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="flex min-h-screen flex-col">
+      <body className="min-h-screen w-full overflow-x-hidden">
         <Cursor />
         {children}
       </body>

@@ -288,7 +288,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-12 px-6 py-16">
+    <main className="relative z-10 mx-auto flex w-full max-w-5xl flex-col gap-12 px-6 py-16 sm:px-8">
       <header className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
           <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">

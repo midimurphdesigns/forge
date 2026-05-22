@@ -33,12 +33,6 @@
   --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
 html,
 body {
   background: var(--color-canvas);
@@ -50,6 +44,7 @@ body {
 
 body {
   min-height: 100svh;
+  width: 100%;
 }
 
 /* Subtle grain — softens the flat-render AI-design tell on #0A0A0B. */
