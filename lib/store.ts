@@ -69,6 +69,7 @@ const INITIAL_LANE_STATUS: Record<LaneName, LaneStatus> = {
 class InMemoryStore implements SessionStore {
   private sessions = new Map<string, SessionState>();
   private aborters = new Map<string, Set<LaneName>>();
+  private controllers = new Map<string, Map<LaneName, AbortController>>();
 
   async create(sessionId: string): Promise<SessionState> {
     const state: SessionState = {
@@ -109,6 +110,7 @@ class InMemoryStore implements SessionStore {
   async delete(sessionId: string): Promise<void> {
     this.sessions.delete(sessionId);
     this.aborters.delete(sessionId);
+    this.controllers.delete(sessionId);
   }
 
   requestLaneAbort(sessionId: string, lane: LaneName): void {
@@ -118,10 +120,27 @@ class InMemoryStore implements SessionStore {
       this.aborters.set(sessionId, set);
     }
     set.add(lane);
+    const controller = this.controllers.get(sessionId)?.get(lane);
+    if (controller && !controller.signal.aborted) {
+      controller.abort();
+    }
   }
 
   isLaneAborted(sessionId: string, lane: LaneName): boolean {
     return this.aborters.get(sessionId)?.has(lane) ?? false;
+  }
+
+  registerController(
+    sessionId: string,
+    lane: LaneName,
+    controller: AbortController,
+  ): void {
+    let map = this.controllers.get(sessionId);
+    if (!map) {
+      map = new Map();
+      this.controllers.set(sessionId, map);
+    }
+    map.set(lane, controller);
   }
 }
 
@@ -137,4 +156,12 @@ export function requestLaneAbort(sessionId: string, lane: LaneName): void {
 
 export function isLaneAborted(sessionId: string, lane: LaneName): boolean {
   return store.isLaneAborted(sessionId, lane);
+}
+
+export function registerLaneController(
+  sessionId: string,
+  lane: LaneName,
+  controller: AbortController,
+): void {
+  store.registerController(sessionId, lane, controller);
 }

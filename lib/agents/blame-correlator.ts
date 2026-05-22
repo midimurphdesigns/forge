@@ -32,6 +32,7 @@ Use git_log to find commits in a window around the error timestamp, git_diff to 
 export async function runBlameCorrelator(
   input: DebugInput,
   sessionId?: string,
+  signal?: AbortSignal,
 ): Promise<BlameCorrelatorResult> {
   const tools = buildGithubTools();
 
@@ -56,6 +57,7 @@ export async function runBlameCorrelator(
       git_blame: tools.git_blame,
     },
     stopWhen: stepCountIs(8),
+    abortSignal: signal,
   });
 
   if (sessionId) {
@@ -68,6 +70,7 @@ export async function runBlameCorrelator(
     system:
       "You are coercing blame-correlator's investigation into a structured result. Be faithful; do not invent commit SHAs that did not appear in the transcript.",
     prompt: `Investigation transcript:\n\n${investigation.text}\n\nProduce the structured BlameCorrelatorResult.`,
+    abortSignal: signal,
   });
 
   if (sessionId) {

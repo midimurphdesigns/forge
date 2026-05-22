@@ -30,6 +30,7 @@ After gathering enough context, produce your final answer.`;
 export async function runSourceReader(
   input: DebugInput,
   sessionId?: string,
+  signal?: AbortSignal,
 ): Promise<SourceReaderResult> {
   const speculator = new Speculator();
 
@@ -65,6 +66,7 @@ export async function runSourceReader(
       fetch_directory: tools.fetch_directory,
     },
     stopWhen: stepCountIs(6),
+    abortSignal: signal,
   });
 
   if (sessionId) {
@@ -77,6 +79,7 @@ export async function runSourceReader(
     system:
       "You are coercing source-reader's investigation into a structured result. Be faithful to the investigation; do not invent details.",
     prompt: `Investigation transcript:\n\n${investigation.text}\n\nProduce the structured SourceReaderResult.`,
+    abortSignal: signal,
   });
 
   if (sessionId) {

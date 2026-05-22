@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { SAMPLE_INPUT } from "@/lib/sample-input";
 import type { Hypothesis, LaneName, LaneResult } from "@/lib/types";
 
-type LaneStatus = "queued" | "running" | "done" | "error" | "aborted";
+type LaneStatus = "queued" | "running" | "stopping" | "done" | "error" | "aborted";
 
 type LaneState = {
   status: LaneStatus;
@@ -280,6 +280,10 @@ export default function Home() {
 
   const interrupt = async (lane: LaneName) => {
     if (!sessionId) return;
+    setLanes((prev) => ({
+      ...prev,
+      [lane]: { ...prev[lane], status: "stopping" },
+    }));
     await fetch("/api/debug/interrupt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -450,13 +454,14 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-3">
                   <StatusBadge status={lane.status} durationMs={lane.durationMs} />
-                  {canInterrupt && (
+                  {(canInterrupt || lane.status === "stopping") && (
                     <button
                       type="button"
                       onClick={() => interrupt(laneName)}
-                      className="font-mono text-[10px] uppercase tracking-[0.18em] text-red-400 underline underline-offset-2"
+                      disabled={lane.status === "stopping"}
+                      className="font-mono text-[10px] uppercase tracking-[0.18em] text-red-400 underline underline-offset-2 disabled:opacity-50"
                     >
-                      stop
+                      {lane.status === "stopping" ? "stopping" : "stop"}
                     </button>
                   )}
                 </div>
@@ -589,11 +594,13 @@ function StatusBadge({
       ? "text-[var(--color-accent)]"
       : status === "running"
         ? "text-yellow-400"
-        : status === "error"
-          ? "text-red-400"
-          : status === "aborted"
-            ? "text-orange-400"
-            : "text-[var(--color-ink-faint)]";
+        : status === "stopping"
+          ? "text-orange-300"
+          : status === "error"
+            ? "text-red-400"
+            : status === "aborted"
+              ? "text-orange-400"
+              : "text-[var(--color-ink-faint)]";
   return (
     <span
       className={`font-mono text-[10px] uppercase tracking-[0.18em] ${color}`}
@@ -616,6 +623,13 @@ function LaneBody({ lane }: { lane: LaneState }) {
     return (
       <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-yellow-400">
         working...
+      </p>
+    );
+  }
+  if (lane.status === "stopping") {
+    return (
+      <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-orange-300">
+        cancelling LLM call...
       </p>
     );
   }

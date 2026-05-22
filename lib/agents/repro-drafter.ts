@@ -24,6 +24,7 @@ Be honest about what you cannot infer — populate knownGaps with the assumption
 export async function runReproDrafter(
   input: DebugInput,
   sessionId?: string,
+  signal?: AbortSignal,
 ): Promise<ReproDrafterResult> {
   const result = await generateObject({
     model: anthropic(MODEL),
@@ -41,6 +42,7 @@ export async function runReproDrafter(
         content: `Stack trace:\n\n${input.stackTrace}\n\nDraft a minimal repro. Confidence reflects how reliably this repro would trigger the same error.`,
       },
     ],
+    abortSignal: signal,
   });
 
   if (sessionId) {

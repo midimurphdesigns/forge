@@ -37,6 +37,7 @@ Severity rubric:
 export async function runFrequencyAnalyzer(
   input: DebugInput,
   sessionId?: string,
+  signal?: AbortSignal,
 ): Promise<FrequencyAnalyzerResult> {
   const investigation = await generateText({
     model: anthropic(MODEL),
@@ -60,6 +61,7 @@ export async function runFrequencyAnalyzer(
       query_related_errors: queryRelatedErrors,
     },
     stopWhen: stepCountIs(6),
+    abortSignal: signal,
   });
 
   if (sessionId) {
@@ -72,6 +74,7 @@ export async function runFrequencyAnalyzer(
     system:
       "You are coercing frequency-analyzer's investigation into a structured result. Be faithful to the numbers in the transcript.",
     prompt: `Investigation transcript:\n\n${investigation.text}\n\nProduce the structured FrequencyAnalyzerResult.`,
+    abortSignal: signal,
   });
 
   if (sessionId) {

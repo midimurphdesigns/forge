@@ -15,6 +15,7 @@ import {
 import {
   clearCost,
   isLaneAborted,
+  registerLaneController,
   sessionStore,
   summarizeCost,
   type SpeculatorMetricsSnapshot,
@@ -28,13 +29,17 @@ import type {
   LaneResult,
 } from "@/lib/types";
 
-type LaneRunner = (input: DebugInput, sessionId: string) => Promise<LaneResult>;
+type LaneRunner = (
+  input: DebugInput,
+  sessionId: string,
+  signal: AbortSignal,
+) => Promise<LaneResult>;
 
 const LANES: Array<{ name: LaneName; run: LaneRunner }> = [
-  { name: "source-reader", run: (i, sid) => runSourceReader(i, sid) },
-  { name: "blame-correlator", run: (i, sid) => runBlameCorrelator(i, sid) },
-  { name: "frequency-analyzer", run: (i, sid) => runFrequencyAnalyzer(i, sid) },
-  { name: "repro-drafter", run: (i, sid) => runReproDrafter(i, sid) },
+  { name: "source-reader", run: (i, sid, sig) => runSourceReader(i, sid, sig) },
+  { name: "blame-correlator", run: (i, sid, sig) => runBlameCorrelator(i, sid, sig) },
+  { name: "frequency-analyzer", run: (i, sid, sig) => runFrequencyAnalyzer(i, sid, sig) },
+  { name: "repro-drafter", run: (i, sid, sig) => runReproDrafter(i, sid, sig) },
 ];
 
 export type ProgressEvent =
@@ -90,8 +95,11 @@ export async function runCoordinator(
         }));
         onProgress?.({ type: "lane:start", lane: lane.name });
 
+        const controller = new AbortController();
+        registerLaneController(sessionId, lane.name, controller);
+
         try {
-          const value = await lane.run(input, sessionId);
+          const value = await lane.run(input, sessionId, controller.signal);
           const durationMs = Date.now() - laneStart;
 
           if (isLaneAborted(sessionId, lane.name)) {
@@ -121,6 +129,27 @@ export async function runCoordinator(
         } catch (err) {
           const durationMs = Date.now() - laneStart;
           const reason = err instanceof Error ? err.message : String(err);
+          const isAbort =
+            controller.signal.aborted ||
+            isLaneAborted(sessionId, lane.name) ||
+            reason.toLowerCase().includes("abort");
+
+          if (isAbort) {
+            await sessionStore.patch(sessionId, (s) => ({
+              ...s,
+              laneStatus: { ...s.laneStatus, [lane.name]: "aborted" },
+              laneDurations: { ...s.laneDurations, [lane.name]: durationMs },
+              abortedLanes: [...s.abortedLanes, lane.name],
+            }));
+            onProgress?.({ type: "lane:aborted", lane: lane.name, durationMs });
+            return {
+              lane: lane.name,
+              status: "rejected",
+              reason: "aborted by user",
+              durationMs,
+            };
+          }
+
           await sessionStore.patch(sessionId, (s) => ({
             ...s,
             laneStatus: { ...s.laneStatus, [lane.name]: "error" },
