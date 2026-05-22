@@ -25,7 +25,8 @@ cp .env.example .env.local
 pnpm dev          # opens on :3000
 ```
 
-Then visit `/debug` and click "run sample investigation."
+Then visit `/` and click "run sample investigation." The page header documents
+the input shape, the four lanes, and the concepts demonstrated.
 
 ## Eval runs
 
@@ -84,6 +85,6 @@ If you're new to this codebase:
 4. `lib/coordinator.ts` — the orchestration
 5. `lib/store.ts` — persistence layer
 6. `app/api/debug/route.ts` — the HTTP surface
-7. `app/debug/page.tsx` — the client
+7. `app/page.tsx` — the client
 
 That sequence introduces concepts in order: data model → one agent → the fan-out → persistence → transport → UI.
