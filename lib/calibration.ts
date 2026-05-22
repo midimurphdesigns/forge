@@ -1,6 +1,14 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { Redis } from "@upstash/redis";
 import type { LaneName } from "@/lib/types";
+
+const HAS_UPSTASH = Boolean(
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+);
+const redis = HAS_UPSTASH ? Redis.fromEnv() : null;
+const CALIBRATION_KEY = "forge:calibration:log";
+const MAX_RECORDS = 1000;
 
 export type CalibrationRecord = {
   lane: LaneName;
@@ -40,6 +48,11 @@ async function ensureDir(): Promise<boolean> {
 }
 
 export async function logOutcome(record: CalibrationRecord): Promise<void> {
+  if (redis) {
+    await redis.lpush(CALIBRATION_KEY, JSON.stringify(record));
+    await redis.ltrim(CALIBRATION_KEY, 0, MAX_RECORDS - 1);
+    return;
+  }
   const ok = await ensureDir();
   if (!ok) return;
   try {
@@ -56,6 +69,16 @@ export async function logOutcome(record: CalibrationRecord): Promise<void> {
 }
 
 export async function readRecords(): Promise<CalibrationRecord[]> {
+  if (redis) {
+    const raw = await redis.lrange<string | CalibrationRecord>(
+      CALIBRATION_KEY,
+      0,
+      -1,
+    );
+    return raw.map((entry) =>
+      typeof entry === "string" ? (JSON.parse(entry) as CalibrationRecord) : entry,
+    );
+  }
   try {
     const text = await fs.readFile(LOG_PATH, "utf8");
     return text

@@ -541,29 +541,67 @@ export default function Home() {
             calibration
           </h2>
           <p className="text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
-            Brier score per lane (lower is better; 0 = perfect, 0.25 = uncalibrated).
-            Weight is applied to confidence on next run.
+            Each subagent reports a confidence number. We don't trust those numbers
+            blindly — LLMs are systematically overconfident. This panel tracks every
+            (predicted confidence, actual outcome) pair across runs and computes a{" "}
+            <span className="text-[var(--color-ink)]">Brier score</span> (lower is
+            better; 0 = perfect, 0.25 = uncalibrated) and a{" "}
+            <span className="text-[var(--color-ink)]">weight</span> (mean outcome ÷
+            mean predicted, clamped to [0.5, 1.5]). The weight is applied to that
+            lane's confidence on the next run.
+          </p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">
+            run the demo 3+ times to see weights move · samples below 3 hold weight at
+            1.00
           </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {LANE_ORDER.map((laneName) => {
               const c = calibration[laneName];
+              const weightDelta = c.weight - 1.0;
+              const weightArrow =
+                Math.abs(weightDelta) < 0.001
+                  ? ""
+                  : weightDelta > 0
+                    ? `↑ +${(weightDelta * 100).toFixed(0)}%`
+                    : `↓ ${(weightDelta * 100).toFixed(0)}%`;
+              const weightColor =
+                Math.abs(weightDelta) < 0.001
+                  ? "text-[var(--color-ink-faint)]"
+                  : weightDelta > 0
+                    ? "text-[var(--color-accent)]"
+                    : "text-orange-300";
               return (
                 <div
                   key={laneName}
                   className="rounded border border-[var(--color-divider)] bg-[var(--color-canvas-elev-1)] p-4"
                 >
-                  <div className="font-mono text-sm font-bold text-[var(--color-ink)]">
-                    {laneName}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="font-mono text-sm font-bold text-[var(--color-ink)]">
+                      {laneName}
+                    </div>
+                    {weightArrow && (
+                      <span
+                        className={`font-mono text-[10px] uppercase tracking-[0.18em] ${weightColor}`}
+                      >
+                        {weightArrow}
+                      </span>
+                    )}
                   </div>
-                  <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
+                  <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
                     samples {c.sampleCount} · brier{" "}
                     {c.brierScore === null ? "—" : c.brierScore.toFixed(3)} · weight{" "}
                     {c.weight.toFixed(2)}
                   </div>
                   <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">
-                    predicted {c.meanPredicted.toFixed(2)} vs outcome{" "}
+                    mean predicted {c.meanPredicted.toFixed(2)} vs mean outcome{" "}
                     {c.meanOutcome.toFixed(2)}
                   </div>
+                  {c.sampleCount < 3 && (
+                    <div className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+                      need {3 - c.sampleCount} more sample
+                      {3 - c.sampleCount === 1 ? "" : "s"} before weighting activates
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -574,6 +612,19 @@ export default function Home() {
       {cost && cost.perLane.length > 0 && (
         <section className="flex flex-col gap-3">
           <h2 className="font-display text-[40px] leading-none tracking-tight">cost</h2>
+          <p className="text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
+            Every Anthropic call is instrumented for input/output/cache tokens and
+            mapped to USD via the published per-model pricing. Each lane carries a{" "}
+            <code className="text-[var(--color-ink)]">cacheControl: {"{ type: ephemeral }"}</code>{" "}
+            breakpoint on the system message.
+          </p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-orange-300">
+            heads up · forge's system prompts are ~80-110 tokens each, below Anthropic's
+            1024-token minimum for caching. The breakpoints are silently ignored on
+            this demo. In production with larger prompts (~3-5K tokens of instructions
+            + tool schemas + RAG context) you would see the cache-read column populate
+            and per-call cost drop ~70-90%.
+          </p>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-muted)]">
             ${cost.totalUsd.toFixed(4)} total · {cost.totalInputTokens.toLocaleString()}{" "}
             input · {cost.totalOutputTokens.toLocaleString()} output ·{" "}
