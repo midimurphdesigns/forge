@@ -1,6 +1,13 @@
+import { Redis } from "@upstash/redis";
 import type { CostSummary, UsageSample } from "@/lib/cost";
 import { CostAccumulator } from "@/lib/cost";
 import type { CoordinatorResult, LaneName, LaneOutcome, LaneResult } from "@/lib/types";
+
+const HAS_UPSTASH = Boolean(
+  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+);
+const redis = HAS_UPSTASH ? Redis.fromEnv() : null;
+const ABORT_KEY = (sessionId: string) => `forge:abort:${sessionId}`;
 
 export type SessionStatus = "running" | "complete" | "aborted";
 
@@ -152,6 +159,24 @@ export const sessionStore: SessionStore = store;
 
 export function requestLaneAbort(sessionId: string, lane: LaneName): void {
   store.requestLaneAbort(sessionId, lane);
+}
+
+export async function requestLaneAbortUpstash(
+  sessionId: string,
+  lane: LaneName,
+): Promise<void> {
+  if (!redis) return;
+  await redis.sadd(ABORT_KEY(sessionId), lane);
+  await redis.expire(ABORT_KEY(sessionId), 600);
+}
+
+export async function isLaneAbortedUpstash(
+  sessionId: string,
+  lane: LaneName,
+): Promise<boolean> {
+  if (!redis) return false;
+  const isMember = await redis.sismember(ABORT_KEY(sessionId), lane);
+  return Boolean(isMember);
 }
 
 export function isLaneAborted(sessionId: string, lane: LaneName): boolean {

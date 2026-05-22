@@ -15,6 +15,7 @@ import {
 import {
   clearCost,
   isLaneAborted,
+  isLaneAbortedUpstash,
   registerLaneController,
   sessionStore,
   summarizeCost,
@@ -98,11 +99,28 @@ export async function runCoordinator(
         const controller = new AbortController();
         registerLaneController(sessionId, lane.name, controller);
 
+        // Cross-instance abort: poll Upstash periodically and call
+        // controller.abort() when the flag flips. On localhost this
+        // is redundant with the in-memory signal; on Vercel it's the
+        // only way an interrupt POST that lands on a different
+        // instance can reach this coordinator.
+        const abortPoller = setInterval(async () => {
+          try {
+            if (await isLaneAbortedUpstash(sessionId, lane.name)) {
+              if (!controller.signal.aborted) controller.abort();
+            }
+          } catch {
+            // swallow — Upstash hiccup shouldn't tear down the lane
+          }
+        }, 500);
+
         try {
           const value = await lane.run(input, sessionId, controller.signal);
           const durationMs = Date.now() - laneStart;
+          clearInterval(abortPoller);
 
-          if (isLaneAborted(sessionId, lane.name)) {
+          const upstashAborted = await isLaneAbortedUpstash(sessionId, lane.name);
+          if (isLaneAborted(sessionId, lane.name) || upstashAborted) {
             await sessionStore.patch(sessionId, (s) => ({
               ...s,
               laneStatus: { ...s.laneStatus, [lane.name]: "aborted" },
@@ -127,11 +145,14 @@ export async function runCoordinator(
           onProgress?.({ type: "lane:done", lane: lane.name, durationMs, result: value });
           return { lane: lane.name, status: "fulfilled", value, durationMs };
         } catch (err) {
+          clearInterval(abortPoller);
           const durationMs = Date.now() - laneStart;
           const reason = err instanceof Error ? err.message : String(err);
+          const upstashAborted = await isLaneAbortedUpstash(sessionId, lane.name);
           const isAbort =
             controller.signal.aborted ||
             isLaneAborted(sessionId, lane.name) ||
+            upstashAborted ||
             reason.toLowerCase().includes("abort");
 
           if (isAbort) {

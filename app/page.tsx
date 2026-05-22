@@ -107,6 +107,11 @@ const CONCEPTS = [
   "n-runs aggregation",
 ];
 
+function formatDuration(ms: number): string {
+  const seconds = (ms / 1000).toFixed(1);
+  return `${seconds}s (${ms.toLocaleString()}ms)`;
+}
+
 const INITIAL_STATE: Record<LaneName, LaneState> = {
   "source-reader": { status: "queued", durationMs: null, result: null, error: null },
   "blame-correlator": { status: "queued", durationMs: null, result: null, error: null },
@@ -364,6 +369,35 @@ export default function Home() {
           )}
         </div>
 
+        <div className="flex flex-col gap-3 rounded border border-[var(--color-divider)] bg-[var(--color-canvas-elev-1)] p-5">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink)]">
+            what's real vs fixtures
+          </h2>
+          <p className="text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
+            The LLM calls, structured outputs, parallel fan-out, abort plumbing,
+            calibration log, prompt caching, and cost math are all real. The
+            data sources the subagents call into are <em>fixture-backed</em>{" "}
+            for this public demo:
+          </p>
+          <ul className="flex flex-col gap-2 text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
+            <li>
+              <span className={META_LABEL}>fixture</span> <code className="text-[var(--color-ink)]">src/auth/session.ts</code> — a small TypeScript snippet shaped like a real auth handler with a null-deref bug. Returned by{" "}
+              <code>fetch_file</code> when source-reader navigates to it.
+            </li>
+            <li>
+              <span className={META_LABEL}>fixture</span> the candidate commits ({" "}
+              <code>a3f1c92</code>, <code>1b8e44d</code>) and their diffs. Returned by{" "}
+              <code>git_log</code> and <code>git_diff</code> when blame-correlator queries the history.
+            </li>
+            <li>
+              <span className={META_LABEL}>fixture</span> the error metrics (1,247 occurrences, 184 affected users, hourly spike). Returned by the error-tracking query tools when frequency-analyzer asks for blast radius.
+            </li>
+            <li>
+              <span className={META_LABEL}>real</span> everything else — the LLM's reasoning, the structured output coercion, the confidence values, the merge logic, the per-lane cost in USD, the speculator hit rate. Swap the fixtures for real GitHub + Sentry adapters and the rest of the system works identically.
+            </li>
+          </ul>
+        </div>
+
         <div className="flex flex-col gap-2">
           <h2 className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
             concepts demonstrated
@@ -422,7 +456,7 @@ export default function Home() {
         </button>
         {totalDurationMs !== null && (
           <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-ink-muted)]">
-            wall-clock {totalDurationMs}ms
+            wall-clock {formatDuration(totalDurationMs)}
           </span>
         )}
         {speculatorMetrics && speculatorMetrics.predictions > 0 && (
@@ -487,7 +521,7 @@ export default function Home() {
                   {h.title}
                 </h3>
                 <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-accent)]">
-                  conf {(h.confidence * 100).toFixed(0)}%
+                  confidence {(h.confidence * 100).toFixed(0)}%
                 </span>
               </header>
               <p className="mt-3 whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
@@ -601,12 +635,13 @@ function StatusBadge({
             : status === "aborted"
               ? "text-orange-400"
               : "text-[var(--color-ink-faint)]";
+  const showDuration = durationMs !== null && status !== "running";
   return (
     <span
       className={`font-mono text-[10px] uppercase tracking-[0.18em] ${color}`}
     >
       {status}
-      {durationMs !== null && status !== "running" ? ` ${durationMs}ms` : ""}
+      {showDuration ? ` · ${formatDuration(durationMs)}` : ""}
     </span>
   );
 }
@@ -654,7 +689,7 @@ function ResultBody({ result }: { result: LaneResult }) {
           {result.lineRange[0]}-{result.lineRange[1]}
         </div>
         <div>
-          <span className={META_LABEL}>conf</span>{" "}
+          <span className={META_LABEL}>confidence</span>{" "}
           <span className="text-[var(--color-accent)]">
             {(result.confidence * 100).toFixed(0)}%
           </span>
@@ -678,7 +713,7 @@ function ResultBody({ result }: { result: LaneResult }) {
           <span className={META_LABEL}>candidates</span> {result.candidates.length}
         </div>
         <div>
-          <span className={META_LABEL}>conf</span>{" "}
+          <span className={META_LABEL}>confidence</span>{" "}
           <span className="text-[var(--color-accent)]">
             {(result.confidence * 100).toFixed(0)}%
           </span>
