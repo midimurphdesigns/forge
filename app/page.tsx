@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { EVAL_SNAPSHOT } from "@/lib/eval/snapshot";
 import { SAMPLE_INPUT } from "@/lib/sample-input";
 import type { Hypothesis, LaneName, LaneResult } from "@/lib/types";
 
@@ -552,7 +553,9 @@ export default function Home() {
           </p>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">
             run the demo 3+ times to see weights move · samples below 3 hold weight at
-            1.00
+            1.00 · early samples often pin a lane at the clamp boundary (-50% or
+            +50%), which is the loop working, not a bug — it means that lane was
+            consistently mis-rated relative to its rubric outcome
           </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {LANE_ORDER.map((laneName) => {
@@ -654,6 +657,88 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-[40px] leading-none tracking-tight">
+          eval harness
+        </h2>
+        <p className="text-[13px] leading-relaxed text-[var(--color-ink-muted)]">
+          Forge ships with a CLI eval harness (
+          <a
+            href="https://github.com/midimurphdesigns/forge/blob/main/scripts/eval.ts"
+            target="_blank"
+            rel="noopener"
+            className="text-[var(--color-accent)] underline underline-offset-2"
+          >
+            scripts/eval.ts
+          </a>
+          ) that runs each of 5 reproducible bug scenarios N times and grades the
+          output against a per-lane rubric (
+          <a
+            href="https://github.com/midimurphdesigns/forge/blob/main/lib/eval/rubric.ts"
+            target="_blank"
+            rel="noopener"
+            className="text-[var(--color-accent)] underline underline-offset-2"
+          >
+            lib/eval/rubric.ts
+          </a>
+          ). The rubric scores correctness components (file match, line-range
+          intersection-over-union, top suspect match, severity match) plus process
+          components (snippet present, reasoning length, candidate explanations). The
+          runner reports mean and stddev per scenario so prompt changes can be
+          compared for statistical significance, not single-run noise. Snapshots
+          write to{" "}
+          <code className="text-[var(--color-ink)]">.forge/evals/&lt;timestamp&gt;.json</code>.
+        </p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--color-ink-faint)]">
+          snapshot below is illustrative · from a {EVAL_SNAPSHOT.runsPerScenario}-run
+          sweep on {EVAL_SNAPSHOT.runAt} · run{" "}
+          <code className="text-[var(--color-ink)]">pnpm eval --runs=3</code> to
+          regenerate
+        </p>
+
+        <div className="rounded border border-[var(--color-divider)] bg-[var(--color-canvas-elev-1)] p-5">
+          <div className="flex items-baseline justify-between gap-3 border-b border-[var(--color-divider)] pb-3">
+            <div className="font-mono text-sm font-bold text-[var(--color-ink)]">
+              total mean rubric score
+            </div>
+            <span className="font-mono text-sm font-bold text-[var(--color-accent)]">
+              {EVAL_SNAPSHOT.totalMeanScorePct}%
+            </span>
+          </div>
+          <div className="mt-3 flex flex-col gap-3">
+            {EVAL_SNAPSHOT.scenarios.map((s) => (
+              <div
+                key={s.scenarioId}
+                className="flex flex-col gap-1 border-b border-[var(--color-divider)] pb-3 last:border-b-0 last:pb-0"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="font-mono text-[13px] font-bold text-[var(--color-ink)]">
+                    {s.scenarioId}
+                  </div>
+                  <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--color-accent)]">
+                    {s.meanScorePct}% · ±{s.stddevScore.toFixed(1)}pts
+                  </div>
+                </div>
+                <div className="text-[12px] leading-relaxed text-[var(--color-ink-muted)]">
+                  {s.description}
+                </div>
+                <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--color-ink-faint)]">
+                  {s.runs} runs · mean {s.meanScore}/{s.maxScore}pts · mean duration{" "}
+                  {(s.meanDurationMs / 1000).toFixed(1)}s
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="text-[12px] leading-relaxed text-[var(--color-ink-faint)]">
+          Why an eval harness matters: LLM output is non-deterministic. A single
+          "correct" answer is a sample from a distribution. n-runs aggregation makes
+          variance visible — a v2 that scores 17/20 once isn't proof of improvement
+          if v1's mean is 15 ± 2. Without this layer, every prompt change is a
+          vibes-based judgment.
+        </p>
+      </section>
 
       {fatal && (
         <section className="rounded border-l-2 border-red-400 bg-red-950/20 p-4">

@@ -52,7 +52,9 @@ export function scoreSourceReader(
   const hasReasoning =
     result.reasoning.length > 20 ? SOURCE_READER_WEIGHTS.hasReasoning : 0;
 
-  const brierOutcome: 0 | 1 = fileMatch > 0 && iou >= 0.5 ? 1 : 0;
+  const total = fileMatch + lineRangeIoUPts + hasSnippet + hasReasoning;
+  const max = sum(Object.values(SOURCE_READER_WEIGHTS));
+  const brierOutcome: 0 | 1 = total >= max * 0.6 ? 1 : 0;
   return {
     lane: "source-reader",
     componentScores: {
@@ -61,8 +63,8 @@ export function scoreSourceReader(
       hasSnippet,
       hasReasoning,
     },
-    total: fileMatch + lineRangeIoUPts + hasSnippet + hasReasoning,
-    maxTotal: sum(Object.values(SOURCE_READER_WEIGHTS)),
+    total,
+    maxTotal: max,
     brierOutcome,
   };
 }
@@ -79,12 +81,14 @@ export function scoreBlameCorrelator(
     result.candidates.every((c) => c.reasoning.length > 10)
       ? BLAME_WEIGHTS.hasReasoning
       : 0;
-  const brierOutcome: 0 | 1 = topSuspectMatch > 0 ? 1 : 0;
+  const total = topSuspectMatch + hasCandidates + hasReasoning;
+  const max = sum(Object.values(BLAME_WEIGHTS));
+  const brierOutcome: 0 | 1 = total >= max * 0.6 ? 1 : 0;
   return {
     lane: "blame-correlator",
     componentScores: { topSuspectMatch, hasCandidates, hasReasoning },
-    total: topSuspectMatch + hasCandidates + hasReasoning,
-    maxTotal: sum(Object.values(BLAME_WEIGHTS)),
+    total,
+    maxTotal: max,
     brierOutcome,
   };
 }
@@ -99,12 +103,14 @@ export function scoreFrequencyAnalyzer(
     result.totalOccurrences > 0 && result.affectedUsers >= 0
       ? FREQUENCY_WEIGHTS.hasMetrics
       : 0;
-  const brierOutcome: 0 | 1 = severityMatch > 0 ? 1 : 0;
+  const total = severityMatch + hasMetrics;
+  const max = sum(Object.values(FREQUENCY_WEIGHTS));
+  const brierOutcome: 0 | 1 = total >= max * 0.6 ? 1 : 0;
   return {
     lane: "frequency-analyzer",
     componentScores: { severityMatch, hasMetrics },
-    total: severityMatch + hasMetrics,
-    maxTotal: sum(Object.values(FREQUENCY_WEIGHTS)),
+    total,
+    maxTotal: max,
     brierOutcome,
   };
 }
@@ -119,16 +125,13 @@ export function scoreReproDrafter(
   const acknowledgesGaps =
     result.knownGaps.length > 0 ? REPRO_WEIGHTS.acknowledgesGaps : 0;
   const total = hasSteps + envSpecified + acknowledgesGaps;
-  const brierOutcome: 0 | 1 = gt.reproExpected
-    ? total >= REPRO_WEIGHTS.hasSteps + REPRO_WEIGHTS.envSpecified
-      ? 1
-      : 0
-    : 1;
+  const max = sum(Object.values(REPRO_WEIGHTS));
+  const brierOutcome: 0 | 1 = gt.reproExpected ? (total >= max * 0.6 ? 1 : 0) : 1;
   return {
     lane: "repro-drafter",
     componentScores: { hasSteps, envSpecified, acknowledgesGaps },
     total,
-    maxTotal: sum(Object.values(REPRO_WEIGHTS)),
+    maxTotal: max,
     brierOutcome,
   };
 }
