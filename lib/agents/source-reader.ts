@@ -11,7 +11,8 @@ const MODEL = "claude-sonnet-4-6";
 
 const Schema = z.object({
   file: z.string(),
-  lineRange: z.tuple([z.number().int(), z.number().int()]),
+  lineRangeStart: z.number().int(),
+  lineRangeEnd: z.number().int(),
   snippet: z.string(),
   surroundingContext: z.string(),
   confidence: z.number().min(0).max(1),
@@ -96,5 +97,10 @@ export async function runSourceReader(
     }));
   }
 
-  return { lane: "source-reader", ...coercion.object };
+  const { lineRangeStart, lineRangeEnd, ...rest } = coercion.object;
+  return {
+    lane: "source-reader",
+    ...rest,
+    lineRange: [lineRangeStart, lineRangeEnd] as [number, number],
+  };
 }

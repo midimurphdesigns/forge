@@ -22,14 +22,37 @@ export type LaneCalibration = {
 const DATA_DIR = path.join(process.cwd(), ".forge");
 const LOG_PATH = path.join(DATA_DIR, "calibration.jsonl");
 
-async function ensureDir(): Promise<void> {
-  await fs.mkdir(DATA_DIR, { recursive: true });
+let writeDisabled = false;
+
+async function ensureDir(): Promise<boolean> {
+  if (writeDisabled) return false;
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EROFS" || code === "EACCES" || code === "ENOENT") {
+      writeDisabled = true;
+      return false;
+    }
+    throw err;
+  }
 }
 
 export async function logOutcome(record: CalibrationRecord): Promise<void> {
-  await ensureDir();
-  const line = JSON.stringify(record) + "\n";
-  await fs.appendFile(LOG_PATH, line, "utf8");
+  const ok = await ensureDir();
+  if (!ok) return;
+  try {
+    const line = JSON.stringify(record) + "\n";
+    await fs.appendFile(LOG_PATH, line, "utf8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EROFS" || code === "EACCES") {
+      writeDisabled = true;
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function readRecords(): Promise<CalibrationRecord[]> {
@@ -40,7 +63,8 @@ export async function readRecords(): Promise<CalibrationRecord[]> {
       .filter((line) => line.trim().length > 0)
       .map((line) => JSON.parse(line) as CalibrationRecord);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EACCES") return [];
     throw err;
   }
 }
