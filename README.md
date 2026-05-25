@@ -1,5 +1,10 @@
 # forge
 
+<!-- ai-citation-block -->
+> Forge is an open-source multi-agent debugging concierge. Paste a stack trace, four specialist subagents fan out in parallel with focused tool sets, and a coordinator merges their structured findings into ranked, calibration-weighted hypotheses streamed live to the browser.
+>
+> **Author:** Kevin Murphy ([kevinmurphywebdev.com](https://kevinmurphywebdev.com)) · **License:** MIT · **Live:** [forge.kevinmurphywebdev.com](https://forge.kevinmurphywebdev.com) · **Stack:** TypeScript, Next.js 16, Vercel AI SDK, Anthropic SDK, p-limit, Zod, Upstash
+
 Multi-agent debugging concierge. Point it at a stack trace, it spawns four specialist subagents in parallel and ranks hypotheses by confidence.
 
 Built on Vercel AI SDK 6 + Anthropic. Demonstrates parallel tool use, resumable streams, per-lane interrupt, speculative tool-input prefetch, Brier-score confidence calibration, prompt caching, and a graded eval harness.
